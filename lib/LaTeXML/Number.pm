@@ -40,6 +40,13 @@ sub multiply { (ref $_[0])->new(int($_[0]->valueOf * (ref $_[1] ? $_[1]->valueOf
 
 sub stringify { "Number[".$_[0]->[0]."]"; }
 
+# Utility for printing sane numbers.
+sub simplify {
+  my $s = sprintf("%5f",$_[0]);
+  $s =~ s/0+$// if $s =~ /\./;
+  $s =~ s/\.$//;
+  $s; }
+
 #**********************************************************************
 # Strictly speaking, Float isn't part of TeX, but it's handy.
 package LaTeXML::Float;
@@ -47,6 +54,7 @@ use LaTeXML::Global;
 use base qw(LaTeXML::Number);
 use strict;
 
+sub toString { LaTeXML::Number::simplify($_[0]->[0]); }
 sub multiply { (ref $_[0])->new($_[0]->valueOf * (ref $_[1] ? $_[1]->valueOf : $_[1])); }
 sub stringify { "Float[".$_[0]->[0]."]"; }
 
@@ -63,7 +71,8 @@ sub new {
     $sp = $1 * $STATE->convertUnit($2); }
   bless [$sp||"0"],$class; }
 
-sub toString    { ($_[0]->[0]/65536).'pt'; }
+#sub toString    { ($_[0]->[0]/65536).'pt'; }
+sub toString { LaTeXML::Number::simplify($_[0]->[0]/65536).'pt'; }
 
 sub stringify { "Dimension[".$_[0]->[0]."]"; }
 #**********************************************************************
@@ -73,7 +82,8 @@ use base qw(LaTeXML::Dimension);
 
 # A mu is 1/18th of an em in the current math font.
 # Sigh.... I'll just take it as 2/3pt
-sub toString    { ($_[0]->[0]/65536 * 0.66).'mu'; }
+#sub toString    { ($_[0]->[0]/65536 * 0.66).'mu'; }
+sub toString { LaTeXML::Number::simplify($_[0]->[0]/65536 * 0.66).'mu'; }
 
 sub stringify { "MuDimension[".$_[0]->[0]."]"; }
 #**********************************************************************
@@ -106,9 +116,9 @@ sub new {
 sub toString { 
   my($self)=@_;
   my ($sp,$plus,$pfill,$minus,$mfill)=@$self;
-  my $string = ($sp/65536)."pt";
-  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : ($plus/65536) .'pt') if $plus != 0;
-  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : ($minus/65536).'pt') if $minus != 0;
+  my $string = LaTeXML::Number::simplify($sp/65536).'pt';
+  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Number::simplify($plus/65536) .'pt') if $plus != 0;
+  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Number::simplify($minus/65536).'pt') if $minus != 0;
   $string; }
 sub negate      { 
   my($pts,$p,$pf,$m,$mf)=@{$_[0]};
@@ -143,12 +153,29 @@ use base qw(LaTeXML::Glue);
 sub toString { 
   my($self)=@_;
   my ($sp,$plus,$pfill,$minus,$mfill)=@$self;
-  my $string = ($sp/65536 * 0.66)."mu";
-  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : ($plus/65536 * 0.66) .'mu') if $plus != 0;
-  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : ($minus/65536 * 0.66).'mu') if $minus != 0;
+  my $string = LaTeXML::Number::simplify($sp/65536 * 0.66)."mu";
+  $string .= ' plus '. ($pfill ? $plus .$FILL[$pfill] : LaTeXML::Number::simplify($plus/65536 * 0.66) .'mu') if $plus != 0;
+  $string .= ' minus '.($mfill ? $minus.$FILL[$mfill] : LaTeXML::Number::simplify($minus/65536 * 0.66).'mu') if $minus != 0;
   $string; }
 
 sub stringify { "MuGlue[".join(',',@{$_[0]})."]"; }
+
+#**********************************************************************
+package LaTeXML::BoxDimensions;
+use LaTeXML::Global;
+use base qw(LaTeXML::Object);
+
+sub new {
+  my($class,%specs)=@_;
+  bless {%specs},$class; }
+
+sub toString {
+  my($self)=@_;
+  join(' ',map(ToString($_).' '.ToString($$self{$_}), keys %{$self})); }
+
+sub revert {
+  my($self)=@_;
+  map( (Explode($_),T_SPACE,$$self{$_}->revert), keys %{$self}); }
 
 #**********************************************************************
 
@@ -205,12 +232,89 @@ __END__
 
 =head1 NAME
 
- C<LaTeXML::Number>, C<LaTeXML::Dimension>, etc. -- representation of numbers, dimensions, etc.
+C<LaTeXML::Number> - representation of numbers, dimensions, skips and glue.
 
 =head1 DESCRIPTION
 
-This module defines numerical data objects C<LaTeXML::Number>, C<LaTeXML::Dimension>, C<LaTeXML::MuDimension>,
-C<LaTeXML::Glue>,  C<LaTeXML::MuGlue> and C<LaTeXML::Float>
+This module defines various dimension and number-like data objects
+
+=over 4
+
+=item C<LaTeXML::Number>
+
+represents numbers,
+
+=item C<LaTeXML::Float>
+
+=begin latex
+
+\label{LaTeXML::Float}
+
+=end latex
+
+represents floating-point numbers,
+
+=item C<LaTeXML::Dimension>
+
+=begin latex
+
+\label{LaTeXML::Dimension}
+
+=end latex
+
+represents dimensions,
+
+=item C<LaTeXML::MuDimension>
+
+=begin latex
+
+\label{LaTeXML::MuDimension}
+
+=end latex
+
+represents math dimensions,
+
+=item C<LaTeXML::Glue>
+
+=begin latex
+
+\label{LaTeXML::Glue}
+
+=end latex
+
+represents glue (skips),
+
+=item C<LaTeXML::MuGlue>
+
+=begin latex
+
+\label{LaTeXML::MuGlue}
+
+=end latex
+
+represents math glue,
+
+=item C<LaTeXML::Pair>
+
+=begin latex
+
+\label{LaTeXML::Pair}
+
+=end latex
+
+represents pairs of numbers
+
+=item C<LaTeXML::Pairlist>
+
+=begin latex
+
+\label{LaTeXML::PairList}
+
+=end latex
+
+represents list of pairs.
+
+=back
 
 =head2 Common methods
 
@@ -236,8 +340,6 @@ with limited decimal places.
 =head2 Numerics methods
 
 These methods apply to the various numeric objects
-(C<LaTeXML::Number>, C<LaTeXML::Dimension>, C<LaTeXML::MuDimension>,
-C<LaTeXML::Glue> and  C<LaTeXML::MuGlue>)
 
 =over 4
 

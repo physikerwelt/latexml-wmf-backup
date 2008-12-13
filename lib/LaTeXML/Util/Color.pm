@@ -19,6 +19,8 @@ use Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT= (qw(&ConvertColor &RGB &Gray2RGB &HSB2RGB &CMYK2RGB));
 
+sub round { int($_[0]+0.5*($_[0] <=> 0)); }
+
 sub ConvertColor {
     my ($model, $spec) = @_; my $color = 0;
     if    ($model =~ /gray/) { $color = '#'.Gray2RGB($spec); }
@@ -26,7 +28,7 @@ sub ConvertColor {
     elsif ($model =~ /cmyk/) { $color = '#'.CMYK2RGB($spec); }
     elsif ($model =~ /hsb/)  { $color = '#'.HSB2RGB($spec); }
     elsif ($model =~ /named/){ $color = $spec; }
-    else { Warn("Unknown color model: $model"); }
+    else { Warn(":unexpected:$model Unknown color model: $model"); }
     $color; }
 
 sub RGB { my ($_r, $_g, $_b) = map(round($_*255), _ValueList($_[0]));

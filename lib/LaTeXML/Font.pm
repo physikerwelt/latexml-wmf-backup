@@ -80,6 +80,11 @@ sub merge {
   my $color  = $options{color}  || $$self[4];
   (ref $self)->new_internal($family,$series,$shape,$size,$color); }
 
+# Really only applies to Math Fonts, but that should be handled elsewhere; We punt here.
+sub specialize {
+  my($self,$string)=@_;
+  $self; }
+
 # Return a string representing the font relative to other.
 sub XXrelativeTo {
   my($self,$other)=@_;
@@ -199,8 +204,9 @@ sub new {
   my $shape  = $options{shape};
   my $size   = $options{size};
   my $color  = $options{color};
-  my $force  = $options{forcebold} || 0;
-  $class->new_internal($family,$series,$shape,$size,$color,$force); }
+  my $forcebold  = $options{forcebold} || 0;
+  my $forceshape = $options{forceshape} || 0;
+  $class->new_internal($family,$series,$shape,$size,$color,$forcebold,$forceshape); }
 
 sub default { $_[0]->new_internal('math', $DEFSERIES, 'italic',$DEFSIZE, $DEFCOLOR,0); }
 
@@ -214,7 +220,8 @@ sub merge {
   my $shape  = $options{shape}  || $$self[2];
   my $size   = $options{size}   || $$self[3];
   my $color  = $options{color}  || $$self[4];
-  my $force  = $options{forcebold} || $$self[5];
+  my $forcebold  = $options{forcebold} || $$self[5];
+  my $forceshape  = $options{forceshape} || $$self[6];
   # In math, setting any one of these, resets the others to default.
 #  $family = $DEFFAMILY if $family && !$options{family} && ($options{series} || $options{shape});
 #  $series = $DEFSERIES if $series && !$options{series} && ($options{family} || $options{shape});
@@ -222,7 +229,7 @@ sub merge {
   $family = $DEFFAMILY if !$options{family} && ($options{series} || $options{shape});
   $series = $DEFSERIES if !$options{series} && ($options{family} || $options{shape});
   $shape  = $DEFSHAPE  if !$options{shape}  && ($options{family} || $options{series});
-  (ref $self)->new_internal($family,$series,$shape,$size,$color,$force); }
+  (ref $self)->new_internal($family,$series,$shape,$size,$color,$forcebold,$forceshape); }
 
 # Instanciate the font for a particular class of symbols.
 # NOTE: This works in `normal' latex, but probably needs some tunability.
@@ -234,7 +241,7 @@ sub merge {
 # Use Unicode properties to determine font merging.
 sub specialize {
   my($self,$string)=@_;
-  my($family,$series,$shape,$size,$color,$forcebold)=@$self;
+  my($family,$series,$shape,$size,$color,$forcebold,$forceshape)=@$self;
 print STDERR "Specialized font ".ToString($self)." for $string " if $LaTeXML::Font::DEBUG;
 
   $series = 'bold' if $forcebold;
@@ -243,28 +250,28 @@ print STDERR "Specialized font ".ToString($self)." for $string " if $LaTeXML::Fo
     $shape  = 'italic' if !$shape && !$family; }
   elsif($string =~ /^\p{Greek}$/){	# Single Greek character?
     if($string =~ /^\p{Lu}$/){	# Uppercase
-print STDERR "Greek Upper"  if $LaTeXML::Font::DEBUG;
+      print STDERR "Greek Upper"  if $LaTeXML::Font::DEBUG;
       if(!$family || ($family eq 'math')){
 	$family=$DEFFAMILY; 	
 	$shape=$DEFSHAPE if $shape && ($shape ne $DEFSHAPE); }}
     else {			# Lowercase
-print STDERR "Greek Lower"  if $LaTeXML::Font::DEBUG;
+      print STDERR "Greek Lower"  if $LaTeXML::Font::DEBUG;
       $family=$DEFFAMILY if !$family || ($family ne $DEFFAMILY);
-      $shape='italic';  # always ?
+      $shape='italic' if !$shape || !$forceshape;  # always ?
       if($forcebold){ $series = 'bold';}
       elsif($series && ($series ne $DEFSERIES)){ $series = $DEFSERIES; }}}
   elsif($string =~ /^\p{N}$/){	# Digit
-print STDERR "Digit"  if $LaTeXML::Font::DEBUG;
+    print STDERR "Digit"  if $LaTeXML::Font::DEBUG;
     if(!$family || ($family eq 'math')){
       $family = $DEFFAMILY;
       $shape  = $DEFSHAPE if !$shape || ($shape ne $DEFSHAPE); }}
   else {			# Other Symbol
-print STDERR "Symbol" if $LaTeXML::Font::DEBUG;
+    print STDERR "Symbol" if $LaTeXML::Font::DEBUG;
     $family=$DEFFAMILY; $shape=$DEFSHAPE; # defaults, always.
     if($forcebold){ $series = 'bold';}
     elsif($series && ($series ne $DEFSERIES)){ $series = $DEFSERIES; }}
 
-my $f=  (ref $self)->new_internal($family,$series,$shape,$size,$color,$forcebold); 
+my $f=  (ref $self)->new_internal($family,$series,$shape,$size,$color,$forcebold,$forceshape); 
 print STDERR " => ".ToString($f)."\n" if $LaTeXML::Font::DEBUG;
 $f;
 }
@@ -279,7 +286,8 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Font> and C<LaTeXML::MathFont> -- representation of fonts.
+C<LaTeXML::Font> - representation of fonts,
+along with the specialization C<LaTeXML::MathFont>.
 
 =head1 DESCRIPTION
 
@@ -292,17 +300,27 @@ C<LaTeXML::Font> and C<LaTeXML::MathFont> represent fonts
 
 The attributes are
 
-   family : serif, sansserif, typewriter, caligraphic, fraktur, script
-   series : medium, bold
-   shape  : upright, italic, slanted, smallcaps
-   size   : tiny, footnote, small, normal, large, Large, LARGE, huge, Huge
-   color  : any named color, default is black
+ family : serif, sansserif, typewriter, caligraphic,
+          fraktur, script
+ series : medium, bold
+ shape  : upright, italic, slanted, smallcaps
+ size   : tiny, footnote, small, normal, large,
+          Large, LARGE, huge, Huge
+ color  : any named color, default is black
 
 They are usually merged against the current font, attempting to mimic the,
 sometimes counter-intuitive, way that TeX does it,  particularly for math
 
-Additionally, C<LaTeXML::MathFont> supports C<$font->specialize($string);>, which
-computes a font reflecting how the specific C<$string> would be printed when
+=head2 C<LaTeXML::MathFont>
+
+=begin latex
+
+\label{LaTeXML::MathFont}
+
+=end latex
+
+C<LaTeXML::MathFont> supports C<$font->specialize($string);> for
+computing a font reflecting how the specific C<$string> would be printed when
 C<$font> is active; This (attempts to) handle the curious ways that lower case
 greek often doesn't get a different font.  In particular, it recognizes the
 following classes of strings: single latin letter, single uppercase greek character,

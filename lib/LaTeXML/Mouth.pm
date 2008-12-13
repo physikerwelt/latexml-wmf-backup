@@ -22,8 +22,9 @@ use base qw(LaTeXML::Object);
 sub new {
   my($class,$string)=@_;
   my $self = {string=>$string,source=>"Anonmymous String"};
-  $$self{buffer}=[split("\n",$string)];
+#  $$self{buffer}=[split("\n",$string)];
   bless $self,$class;
+  $$self{buffer}=[(defined $string ? $self->splitString($string) : ())];
   $self->initialize;
   $self; }
 
@@ -43,6 +44,16 @@ sub finish {
   $$self{chars}=[];
   $$self{nchars}=0;
 }
+
+# This is (hopefully) a platform independent way of splitting a string
+# into "lines" ending with CRLF, CR or LF (DOS, Mac or Unix).
+sub splitString {
+  my($self,$string)=@_;
+#  $string =~ s/(?:\015\012|\015|\012)$//; # Remove trailing lineend, if any
+#  $string =~ s/(?:\015\012|\015|\012)/\n/sg; #  Normalize remaining
+#  ($string ? split("\n",$string) : ("")); }		  # And split.
+  $string =~ s/(?:\015\012|\015|\012)/\n/sg; #  Normalize remaining
+  split("\n",$string); }		  # And split.
 
 sub getNextLine {
   my($self)=@_;
@@ -88,10 +99,16 @@ sub getLocator {
     my $chars=$$self{chars};
     my $n = $$self{nchars}; 
     $c=$n-1 if $c >=$n;
-    my $p1 = join('',@$chars[0..$c-1])||''; chomp($p1);
-    my $p2 = join('',@$chars[$c..$n-1])||''; chomp($p2);
-    $msg .="\n  ".$p1."\n  ".(' ' x $c).'^'.' '.$p2; }
+    my $c0 = ($c > 50 ? $c-40 : 0);
+    my $cn = ($n-$c > 50 ? $c+40 : $n-1);
+    my $p1 = join('',@$chars[$c0..$c-1])||''; chomp($p1);
+    my $p2 = join('',@$chars[$c..$cn])||''; chomp($p2);
+    $msg .="\n  ".$p1."\n  ".(' ' x ($c-$c0)).'^'.' '.$p2; }
   $msg; }
+
+sub getSource {
+  my($self)=@_;
+  $$self{source}; }
 
 #**********************************************************************
 # See The TeXBook, Chapter 8, The Characters You Type, pp.46--47.
@@ -117,7 +134,8 @@ sub handle_escape {		# Read control sequence
 
 sub handle_EOL {
   my($self)=@_;
-  ($$self{colno}==1 ? T_CS('\par') 
+  ($$self{colno}==1
+   ? ($STATE->lookupValue('inPreamble') ? T_SPACE : T_CS('\par'))
    : ($STATE->lookupValue('PRESERVE_NEWLINES') ? Token("\n",CC_SPACE) : T_SPACE)); 
 }
 
@@ -218,7 +236,7 @@ sub readRawLines {
     else {
       $line = $self->getNextLine; 
       if(!defined $line){
-	Error("Fell off end trying to match a lines to \"$endline\" from ".Stringify($self));
+	Error(":expected:$endline Fell off end trying to match a lines to \"$endline\" from ".Stringify($self));
 	last; }
       $line =~ s/\s*$/\n/s if defined $line;	# Is this right? 
       $$self{lineno}++;
@@ -245,13 +263,15 @@ use strict;
 use LaTeXML::Global;
 use LaTeXML::Util::Pathname;
 use base qw(LaTeXML::Mouth);
-
+use Encode;
 sub new {
   my($class,$pathname)=@_;
   local *IN;
-  open(IN,$pathname) || Fatal("Can't read from $pathname");
+  if(! -r $pathname){ Fatal(":missing_file:$pathname Input file is not readable."); }
+  elsif((!-z $pathname) && (-B $pathname)){Fatal(":missing_file:$pathname Input file appears to be binary."); }
+  open(IN,$pathname) || Fatal(":missing_file:$pathname Can't read: ",$!);
   my $shortpath=pathname_relative($pathname,pathname_cwd);
-  my $self = {pathname=>$pathname, source=>$shortpath, IN => *IN};
+  my $self = {pathname=>$pathname, source=>$shortpath, IN => *IN, buffer=>[]};
   bless $self,$class;
   $self->initialize;
   NoteBegin("Processing $$self{source}");
@@ -266,15 +286,37 @@ sub finish {
 
 sub hasMoreInput {
   my($self)=@_;
-  ($$self{colno} < $$self{nchars}) || $$self{IN}; }
+#  ($$self{colno} < $$self{nchars}) || $$self{IN}; }
+  ($$self{colno} < $$self{nchars}) || scalar(@{$$self{buffer}}) || $$self{IN}; }
+our $WARNED_8BIT=0;
 
-sub getNextLine {
+sub XXXgetNextLine {
   my($self)=@_;
   return undef unless $$self{IN};
   my $fh = \*{$$self{IN}};
   my $line = <$fh>;
   if(! defined $line){
     close($fh); $$self{IN}=undef; }
+  if($line){
+    if(my $encoding = $STATE->lookupValue('INPUT_ENCODING')){
+      $line = decode($encoding,$line); }}
+  $line; }
+
+sub getNextLine {
+  my($self)=@_;
+  if(! scalar(@{$$self{buffer}})){
+    return undef unless $$self{IN};
+    my $fh = \*{$$self{IN}};
+    my $line = <$fh>;
+    if(! defined $line){
+      close($fh); $$self{IN}=undef; }
+    else {
+      push(@{$$self{buffer}}, $self->splitString($line)); }}
+
+  my $line = (shift(@{$$self{buffer}})||''). "\n"; # put line ending back!
+  if($line){
+    if(my $encoding = $STATE->lookupValue('INPUT_ENCODING')){
+      $line = decode($encoding,$line); }}
   $line; }
 
 sub stringify {
@@ -295,9 +337,9 @@ use base qw(LaTeXML::FileMouth);
 sub new {
   my($class,$pathname)=@_;
   local *IN;
-  open(IN,$pathname) || Fatal("Can't read from $pathname");
+  open(IN,$pathname) || Fatal(":missing_file:$pathname Can't read: ",$!);
   my $shortpath=pathname_relative($pathname,pathname_cwd);
-  my $self = {pathname=>$pathname, source=>$shortpath, IN => *IN};
+  my $self = {pathname=>$pathname, source=>$shortpath, IN => *IN, buffer=>[]};
   bless $self,$class;
   $self->initialize;
   NoteBegin("Style $$self{source}");
@@ -340,6 +382,10 @@ sub getLocator {
   my $line = LaTeXML::Error::line_in_file($path);
   $path.($line ? " line $line":''); }
 
+sub getSource {
+  my($self)=@_;
+  $$self{source}; }
+
 sub hasMoreInput { 0; }
 sub readToken { undef; }
 
@@ -353,20 +399,49 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Mouth>, C<LaTeXML::FileMouth> and C<LaTeXML::StyleMouth> -- tokenize
-the input.
+C<LaTeXML::Mouth> - tokenize the input.
 
 =head1 DESCRIPTION
 
 A C<LaTeXML::Mouth> (and subclasses) is responsible for I<tokenizing>, ie.
 converting plain text and strings into L<LaTeXML::Token>s according to the
 current category codes (catcodes) stored in the C<LaTeXML::State>.
-C<LaTeXML::FileMouth> specializes C<LaTeXML::Mouth> to tokenize from a file.
-C<LaTeXML::StyleMouth> further specializes C<LaTeXML::FileMouth> for processing
+
+=over 4
+
+=item C<LaTeXML::FileMouth>
+
+=begin latex
+
+\label{LaTeXML::FileMouth}
+
+=end latex
+
+specializes C<LaTeXML::Mouth> to tokenize from a file.
+
+=item C<LaTeXML::StyleMouth>
+
+=begin latex
+
+\label{LaTeXML::StyleMouth}
+
+=end latex
+
+further specializes C<LaTeXML::FileMouth> for processing
 style files, setting the catcode for C<@> and ignoring comments.
 
-C<LaTeXML::PerlMouth> is not really a Mouth in the above sense, but is used
+=item C<LaTeXML::PerlMouth>
+
+=begin latex
+
+\label{LaTeXML::PerlMouth}
+
+=end latex
+
+is not really a Mouth in the above sense, but is used
 to definitions from perl modules with exensions C<.ltxml> and C<.latexml>.
+
+=back
 
 =head2 Creating Mouths
 
@@ -409,9 +484,10 @@ This is useful for the C<\verb> command.
 
 =item C<< $lines = $mouth->readRawLines($endline,$exact); >>
 
-Reads raw lines (not tokenized) from C<$mouth> until a line matches C<$endline>.
-If C<$exact> is true, the matching is done like with the c<comment> package;
-the ending line must match exactly, with no leading or trailing data.
+Reads raw (untokenized) lines from C<$mouth> until a line matching C<$endline>
+is found.
+If C<$exact> is true, C<$endline> is matched exactly, with no leading or trailing
+data (like in the c<comment> package).
 Otherwise, the match is done like with the c<verbatim> environment;
 any text preceding C<$endline> is returned as the last line, and any characters
 after C<$endline> remains in the mouth to be tokenized.

@@ -1,3 +1,109 @@
+0.6.0  2008-04-09
+       Released.
+     - Reorganized site and manual building.
+       Unfortunately, the manual isn't as extensively rewritten
+       as I'd like.
+     - reorganized build & installation.
+       Should be able to generate rpm's now.
+
+0.5.x  2008-03-18
+     - Added implementation for supertabular and longtable
+       (the latter isn't perfect; it produces empty rows after
+       header/footers)
+     - random minor fixes
+0.5.x  2008-03-03
+     - Added support for class & package options
+       with new exported functions in LaTeXML::Package
+       (DeclareOption, PassOptions, ProcessOptions, ExecuteOptions).
+     - Modular XSLT: individual XSLT files correspond
+       to the Schema modules and are assembled into
+       composite html and xhtml versions.
+     - Option to latexmlpost to suppress section numbering.
+     - new package ifpdf
+     - more consistent date formatting
+     - switch to using id in html instead of <a name=...
+     - make "\ " generate no-break-space (more portable)
+     - random other minor fixes.
+     - documentation improvement
+
+0.5.x  2008-01-16
+     - Major check-in of accumulated changes
+     - Added a MathFork/MathBranch construct to represent
+       math with alternative structures, especially alignment.
+       This allows representing eg. eqnarray as a group
+       of equations. Each equation has a MathFork where
+       the main branch is the complete equation (hopefully semantic),
+       and the branch contains 1 or more tr each containing 3 td.
+       Thus both the meaning and the structured alignment can
+       be preserved.
+     - Change to use xml:id instead of id.
+     - Changed common attribute label to labels (plural)
+       along with support in postprocessing, etc.
+       This is since LaTeX in principle allows multiple labels
+       to attach to the same place.
+       The labels are also stored as "LABEL:text" instead of just "text",
+       so that the same mechanism can be leveraged for other
+       crossreferencing later (eg. acronyms,etc).
+     - Some generic exported support functions to ease the above
+       CleanLabel, CleanIndexKey, CleanBibKey, CleanURL, GenerateID
+
+0.5.x  2007-12-01
+     - Conversion to RelaxNG Schema.
+       (currently only recognizes XML format)
+       Use RelaxNGSchema($schema) to declare the schema to use.
+     - Continued refinement and simplification of model.
+     - Use xml:id instead of id.
+
+0.5.x  2007-10-10
+     - Began revising documentation.
+       Added documentation of DTD; this led to refining
+       and making the model and attributes more consistent.
+     - Yet another alignment/math fix.
+     - more complete hyperref.
+     
+0.5.99  2007-09-26
+	Released.
+
+0.5.x  2007-09-20
+     - Added Conditionals to deal with encoding changes in
+       XML::LibXML; LaTeXML should work with 1.61 or newer.
+     - Better detection of latex (vs. plain tex)
+     - Modularized CSS; allows multiple css stylesheets,
+       separated supplied stylesheet into several options
+       core, navbar-left, navbar-right, theme-blue, amsart
+     - Lots of more fixes due to arXMLiv project testing.
+     - Initial implementation of ams classes
+       (amsart,amsproc,amsbook, gen-j-l,gen-m-l,gen-p-l),
+       and upref.
+     - Improved interaction between alignments, text and math modes.
+     - improved manual.
+
+0.5.x  2007-09-05
+     - registered missing handlers in Post::Scan (thanks Harald Soleng)
+
+0.5.9  2007-06-20
+     - Hmmm, I haven't been keeping the changelog uptodate.
+       Things _have_ been happening...
+     - Lots of changes, including:
+     - Improvements to handling of various kinds of Alignments,
+       including multrow, rowspan, tabularx packages
+     - enhancements to postprocessing to support splitting single
+       documents into multiple output pages, as well as crossreferencing
+       between multiple source documents.
+     - Improvements to manual.
+     - Updated for XML::LibXML version 1.62
+       No longer explicitly requires XPathContext.
+     - Experimental math linebreaker 
+       (see --linelength option to latexmlpost)
+     - Various minor correctness & robustness patches.
+       [Thanks to the DLMF and ArXMLiv projects for testing and patches]
+
+0.5.1  2006-04-27
+       Released.
+
+0.5.0  2006-03-22
+       Released.
+
 0.5.x  2006-08-03
      - Changes to how frontmatter is handled, and represented.
        Frontmatter gets accumulated and added to <document>

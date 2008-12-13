@@ -1,23 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE document PUBLIC "-//NIST LaTeXML//LaTeXML article" "LaTeXML.dtd">
 <?latexml class="article"?>
+<?latexml RelaxNGSchema="LaTeXML"?>
 <document xmlns="http://dlmf.nist.gov/LaTeXML">
-  <section id="S1" refnum="1">
+  <section refnum="1" xml:id="S1">
     <title>Testing Over</title>
-    <para id="S1.p1">
-      <equation id="Ex1">
+    <para xml:id="S1.p1">
+      <equation xml:id="S1.Ex1">
         <Math mode="display" tex="abc\over def" text="(a * b * c) / (d * e * f)">
           <XMath>
             <XMApp>
-              <XMTok meaning="div" role="MULOP"/>
+              <XMTok meaning="divide" role="MULOP"/>
               <XMApp>
-                <XMTok role="MULOP">⁢</XMTok>
+                <XMTok meaning="times" role="MULOP">⁢</XMTok>
                 <XMTok role="UNKNOWN" font="italic">a</XMTok>
                 <XMTok role="UNKNOWN" font="italic">b</XMTok>
                 <XMTok role="UNKNOWN" font="italic">c</XMTok>
               </XMApp>
               <XMApp>
-                <XMTok role="MULOP">⁢</XMTok>
+                <XMTok meaning="times" role="MULOP">⁢</XMTok>
                 <XMTok role="UNKNOWN" font="italic">d</XMTok>
                 <XMTok role="UNKNOWN" font="italic">e</XMTok>
                 <XMTok role="UNKNOWN" font="italic">f</XMTok>
@@ -27,22 +27,22 @@
         </Math>
       </equation>
     </para>
-    <para id="S1.p2">
-      <equation id="Ex2">
+    <para xml:id="S1.p2">
+      <equation xml:id="S1.Ex2">
         <Math mode="display" tex="a{bc\over de}f" text="a * ((b * c) / (d * e)) * f">
           <XMath>
             <XMApp>
-              <XMTok role="MULOP">⁢</XMTok>
+              <XMTok meaning="times" role="MULOP">⁢</XMTok>
               <XMTok role="UNKNOWN" font="italic">a</XMTok>
               <XMApp>
-                <XMTok meaning="div" role="MULOP" style="display"/>
+                <XMTok meaning="divide" role="MULOP" style="display"/>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">b</XMTok>
                   <XMTok role="UNKNOWN" font="italic">c</XMTok>
                 </XMApp>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">d</XMTok>
                   <XMTok role="UNKNOWN" font="italic">e</XMTok>
                 </XMApp>
@@ -53,22 +53,22 @@
         </Math>
       </equation>
     </para>
-    <para id="S1.p3">
-      <equation id="Ex3">
+    <para xml:id="S1.p3">
+      <equation xml:id="S1.Ex3">
         <Math mode="display" tex="a{bc\over de}f" text="a * ((b * c) / (d * e)) * f">
           <XMath>
             <XMApp>
-              <XMTok role="MULOP">⁢</XMTok>
+              <XMTok meaning="times" role="MULOP">⁢</XMTok>
               <XMTok role="UNKNOWN" font="italic">a</XMTok>
               <XMApp>
-                <XMTok meaning="div" role="MULOP" style="display"/>
+                <XMTok meaning="divide" role="MULOP" style="display"/>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">b</XMTok>
                   <XMTok role="UNKNOWN" font="italic">c</XMTok>
                 </XMApp>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">d</XMTok>
                   <XMTok role="UNKNOWN" font="italic">e</XMTok>
                 </XMApp>
@@ -79,22 +79,22 @@
         </Math>
       </equation>
     </para>
-    <para id="S1.p4">
-      <equation id="Ex4">
+    <para xml:id="S1.p4">
+      <equation xml:id="S1.Ex4">
         <Math mode="display" tex="a{bc\over de}f" text="a * ((b * c) / (d * e)) * f">
           <XMath>
             <XMApp>
-              <XMTok role="MULOP">⁢</XMTok>
+              <XMTok meaning="times" role="MULOP">⁢</XMTok>
               <XMTok role="UNKNOWN" font="italic">a</XMTok>
               <XMApp>
-                <XMTok meaning="div" role="MULOP" style="display"/>
+                <XMTok meaning="divide" role="MULOP" style="display"/>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">b</XMTok>
                   <XMTok role="UNKNOWN" font="italic">c</XMTok>
                 </XMApp>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">d</XMTok>
                   <XMTok role="UNKNOWN" font="italic">e</XMTok>
                 </XMApp>
@@ -105,22 +105,22 @@
         </Math>
       </equation>
     </para>
-    <para id="S1.p5">
-      <equation id="Ex5">
+    <para xml:id="S1.p5">
+      <equation xml:id="S1.Ex5">
         <Math mode="display" tex="a{bc\over de}f" text="a * ((b * c) / (d * e)) * f">
           <XMath>
             <XMApp>
-              <XMTok role="MULOP">⁢</XMTok>
+              <XMTok meaning="times" role="MULOP">⁢</XMTok>
               <XMTok role="UNKNOWN" font="italic">a</XMTok>
               <XMApp>
-                <XMTok meaning="div" role="MULOP" style="display"/>
+                <XMTok meaning="divide" role="MULOP" style="display"/>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">b</XMTok>
                   <XMTok role="UNKNOWN" font="italic">c</XMTok>
                 </XMApp>
                 <XMApp>
-                  <XMTok role="MULOP">⁢</XMTok>
+                  <XMTok meaning="times" role="MULOP">⁢</XMTok>
                   <XMTok role="UNKNOWN" font="italic">d</XMTok>
                   <XMTok role="UNKNOWN" font="italic">e</XMTok>
                 </XMApp>

@@ -14,7 +14,6 @@
 package LaTeXML::Rewrite;
 use strict;
 use LaTeXML::Global;
-use XML::LibXML;
 
 sub new {
   my($class,$mode,@specs)=@_;
@@ -22,13 +21,27 @@ sub new {
   while(@specs){
     my($op,$pattern) = (shift(@specs),shift(@specs));
    push(@clauses,['uncompiled',$op,$pattern]); }
-  bless {mode=>$mode, math=>($mode eq 'math'), clauses=>[@clauses]}, $class; }
+  bless {mode=>$mode, math=>($mode eq 'math'), clauses=>[@clauses], labels=>{}}, $class; }
 
 sub clauses { @{$_[0]->{clauses}}; }
 
 sub rewrite {
   my($self,$document,$node)=@_;
+  foreach my $node ($document->findnodes('//*[@labels]')){
+    my $labels = $node->getAttribute('labels');
+    if(my $id = $node->getAttribute('xml:id')){
+      foreach my $label (split(/ /,$labels)){
+	$$self{labels}{$label}=$id; }}
+    else {
+      Warn(":malformed Node has labels \"$labels\" but no xml:id ".Stringify($node)); }}
     $self->applyClause($document,$node,0,$self->clauses); }
+
+sub getLabelID {
+  my($self,$label)=@_;
+  if(my $id = $$self{labels}{LaTeXML::Package::CleanLabel($label)}){ $id; }
+  else {
+    Error(":malformed:<rewrite> No id for label $label in Rewrite");
+    undef; }}
 
 # Rewrite spec as input
 #   scope  => $scope  : a scope like "section:1.2.3" or "label:eq.one"; translated to xpath
@@ -58,6 +71,8 @@ sub applyClause {
   my($ignore,$op,$pattern)=@$clause;
   if($op eq 'trace'){
     local $LaTeXML::Rewrite::DEBUG = 1;
+    $self->applyClause($document,$tree,$n_to_replace,@more_clauses); }
+  elsif($op eq 'ignore'){
     $self->applyClause($document,$tree,$n_to_replace,@more_clauses); }
   elsif($op eq 'select'){
     my($xpath,$nnodes)=@$pattern;
@@ -147,7 +162,7 @@ sub applyClause {
       if(&$pattern($string)){
 	$text->setData($string); }}}
   else {
-    Error("Unknown directive \"$op\" in Compiled Rewrite spec"); }
+    Error(":malformed:<rewrite> Unknown directive \"$op\" in Compiled Rewrite spec"); }
 }
 
 #**********************************************************************
@@ -157,19 +172,25 @@ sub compileClause {
   my($oop,$opattern)=($op,$pattern);
   if   ($op eq 'label'){
     if(ref $pattern eq 'ARRAY'){
-      $op='multi_select'; $pattern = [map(["descendant-or-self::*[\@label='$_']",1], @$pattern)]; }
+#      $op='multi_select'; $pattern = [map(["descendant-or-self::*[\@label='$_']",1], @$pattern)]; }
+      
+      $op='multi_select'; $pattern = [map(["descendant-or-self::*[\@xml:id='$_']",1],
+					  map($self->getLabelID($_),@$pattern))]; }
     else {
-      $op='select'; $pattern=["descendant-or-self::*[\@label='$pattern']",1]; }}
+#      $op='select'; $pattern=["descendant-or-self::*[\@label='$pattern']",1]; }}
+      $op='select'; $pattern=["descendant-or-self::*[\@xml:id='".$self->getLabelID($pattern)."']",1]; }}
   elsif($op eq 'scope'){
     $op='select';
     if($pattern =~ /^label:(.*)$/){
-      $pattern=["descendant-or-self::*[\@label='$1']",1]; }
+#      $pattern=["descendant-or-self::*[\@label='$1']",1]; }
+      $pattern=["descendant-or-self::*[\@xml:id='".$self->getLabelID($1)."']",1]; }
     elsif($pattern =~ /^id:(.*)$/){
-      $pattern=["descendant-or-self::*[\@id='$1']",1]; }
+      $pattern=["descendant-or-self::*[\@xml:id='$1']",1]; }
     elsif($pattern =~ /^(.*):(.*)$/){
       $pattern=["descendant-or-self::*[local-name()='$1' and \@refnum='$2']",1]; }
     else {
-      Error("Unrecognized scope pattern in Rewrite clause: \"$pattern\""); }}
+      Error(":malformed:<rewrite> Unrecognized scope pattern in Rewrite clause: \"$pattern\"; Ignoring it."); 
+      $op='ignore'; $pattern=[]; }}
   elsif($op eq 'xpath'){
     $op='select'; $pattern=[$pattern,1]; }
   elsif($op eq 'match'){
@@ -198,7 +219,7 @@ sub compile_match {
   elsif($pattern->isaBox){
     $self->compile_match1($document,$pattern); }
   else {
-    Error("Don't know what to do with match=>\"".Stringify($pattern)."\""); }}
+    Error(":malformed:<rewrite> Don't know what to do with match=>\"".Stringify($pattern)."\""); }}
 
 sub compile_match1 {
   my($self,$document,$patternbox)=@_;
@@ -224,25 +245,47 @@ sub compile_match1 {
   print STDERR "Converting \"".ToString($patternbox)."\"\n  => xpath= \"$xpath\"\n" if $LaTeXML::Rewrite::DEBUG;
   [$xpath,scalar(@nodes)]; }
 
-sub compile_replacement {
+sub XXXcompile_replacement {
   my($self,$document,$pattern)=@_;
   if(!ref $pattern){
     $self->compile_replacement1(digest_rewrite(($$self{math} ? '$'.$pattern.'$' : $pattern))); }
   elsif($pattern->isaBox){
     $self->compile_replacement1($pattern); }
   else {
-    Error("Don't know what to do with replacement=>\"".Stringify($pattern)."\""); }}
+    $self->compile_replacement1(digest_rewrite($pattern)); 
+}}
 
-sub compile_replacement1 {
+sub XXXcompile_replacement1 {
   my($self,$patternbox)=@_;
   $patternbox = $patternbox->getBody if $$self{math};
   sub { $_[0]->absorb($patternbox); }}
+
+
+# Reworked to do digestion at replacement time.
+sub compile_replacement {
+  my($self,$document,$pattern)=@_;
+
+  if((ref $pattern) && $pattern->isaBox){
+    $pattern = $pattern->getBody if $$self{math};
+    sub { $_[0]->absorb($pattern); }}
+  else {
+    $pattern = Tokenize($$self{math} ? '$'.$pattern.'$' : $pattern) unless ref $pattern;
+    sub {
+      my $stomach = $STATE->getStomach;
+      $stomach->bgroup;
+      $STATE->assignValue(font=>LaTeXML::Font->new(), 'local');
+      $STATE->assignValue(mathfont=>LaTeXML::MathFont->new(), 'local');
+      my $box = $stomach->digest($pattern,0);
+      $stomach->egroup;
+      $box = $box->getBody if $$self{math};
+      $_[0]->absorb($box); }
+}}
 
 sub compile_regexp {
   my($self,$pattern)=@_;
   my $code =  "sub { \$_[0] =~ s${pattern}g; }";
   my $fcn = eval $code;
-  Error("Failed to compile regexp pattern \"$pattern\" into \"$code\": $!") if $@;
+  Error(":malformed:<rewrite> Failed to compile regexp pattern \"$pattern\" into \"$code\": $!") if $@;
   $fcn; }
 
 #**********************************************************************
@@ -253,7 +296,7 @@ sub digest_rewrite {
   $stomach->bgroup;
   $STATE->assignValue(font=>LaTeXML::Font->new(), 'local');  # Use empty font, so eventual insertion merges.
   $STATE->assignValue(mathfont=>LaTeXML::MathFont->new(), 'local');
-  my $box = $stomach->digest(TokenizeInternal($string),0);
+  my $box = $stomach->digest((ref $string ? $string : Tokenize($string)),0);
   $stomach->egroup;
   $box; }
 
@@ -288,7 +331,7 @@ sub domToXPath_rec {
       elsif(! grep($_->nodeType != XML_ELEMENT_NODE,@children)){
 	push(@predicates,domToXPath_seq($document,'child',@children)); }
       else {
-	Fatal("Cannot generate XPath for mixed content on ".$node->toString); }}
+	Fatal(":misdefined:<rewrite> Cannot generate XPath for mixed content on ".$node->toString); }}
 ###    if($document->getModel->canHaveAttribute($qname,'font')){
 ###      if(my $font = $node->getAttribute('_font')){
 ###	push(@predicates,"\@_font and match-font('".$font."',\@_font)"); }}
@@ -322,7 +365,7 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Rewrite> -- rewrite rules for modifying the XML document.
+C<LaTeXML::Rewrite> - rewrite rules for modifying the XML document.
 
 =head1 DESCRIPTION
 

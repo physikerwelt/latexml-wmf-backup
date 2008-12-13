@@ -30,9 +30,6 @@ sub new {
 # However, if things are included via some other `package', presumably
 # that package will be responsible for loading those extra pacakges, so
 # they should be ignored too, right?
-# NOTE: options from usepackage, etc, get carried to here.
-# For latexml implementations, the global $LaTeXML::PACKAGE_OPTIONS gets 
-# bound to them, but NOTHING is done to pass them to TeX style files!
 
 # HMM: the packageLoaded check only makes sense for style files, and
 # is probably only important for latexml implementations?
@@ -40,13 +37,12 @@ sub input {
   my($self,$name,$types,%options)=@_;
   $name = $name->toString if ref $name;
   # Try to find a Package implementing $name.
-  local @LaTeXML::PACKAGE_OPTIONS = @{$options{options}||[]};
   $name = $1 if $name =~ /^\{(.*)\}$/; # just in case
   my $file = pathname_find($name,paths=>$STATE->lookupValue('SEARCHPATHS'),
 			   types=>$types, installation_subdir=>'Package');
   if(! $file) {
     $STATE->noteStatus(missing=>$name);
-    Error("Cannot find file $name of type ".join(', ',@{$types||[]})
+    Error(":missing_file:$name Cannot find file $name of type ".join(', ',@{$types||[]})
 	  ." in paths ".join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); }
 #  elsif($file =~ /\.(ltxml|latexml)$/){		# Perl module.
   elsif($file =~ /\.ltxml$/){		# Perl module.
@@ -55,11 +51,14 @@ sub input {
     $self->openMouth(LaTeXML::PerlMouth->new($file),0);
     my $pmouth = $$self{mouth};
     do $file; 
-    Fatal("Package $name had an error:\n  $@") if $@; 
+    Fatal(":perl:die Package $name had an error:\n  $@") if $@; 
     $self->closeMouth if $pmouth eq $$self{mouth}; # Close immediately, unless recursive input
   }
-  elsif($file =~ /\.(sty|cls)$/){	# (attempt to) interpret a style file.
+  elsif($file =~ /\.(pool|sty|cls|clo|cnf)$/){	# (attempt to) interpret a style file.
     return if $STATE->lookupValue($file.'_loaded');
+    if(! ($options{raw} || $STATE->lookupValue('INCLUDE_STYLES'))){
+      Warn(":unexpected:$file Ignoring style file $file");
+      return; }
     $STATE->assignValue($file.'_loaded'=>1,'global');
     $self->openMouth(LaTeXML::StyleMouth->new($file), 0);  }
   else {			# Else read as an included file.
@@ -72,7 +71,7 @@ sub input {
       $self->openMouth(LaTeXML::PerlMouth->new($conf),0);
       my $pmouth = $$self{mouth};
       do $conf; 
-      Fatal("Configuration file $conf had an error:\n  $@") if $@; 
+      Fatal(":perl:die Configuration file $conf had an error:\n  $@") if $@; 
       $self->closeMouth if $pmouth eq $$self{mouth}; # Close immediately, unless rec. input
     }
     # NOW load the input --- UNLESS INHIBITTED!!!
@@ -97,7 +96,8 @@ sub openMouth {
 sub closeMouth {
   my($self,$forced)=@_;
   if(!$forced && (@{$$self{pushback}} || $$self{mouth}->hasMoreInput)){
-    Error("Closing mouth with input remaining: ".Stringify($self->readToken)); }
+    my $next = Stringify($self->readToken);
+    Error(":unexpected:$next Closing mouth with input remaining: $next"); }
   $$self{mouth}->finish;
   if(@{$$self{mouthstack}}){
     ($$self{mouth},$$self{pushback},$$self{autoclose}) = @{ shift(@{$$self{mouthstack}}) }; }
@@ -126,13 +126,17 @@ sub getLocator {
   my $loc = (defined $$self{mouth} ? $$self{mouth}->getLocator($long) : '');
   if(!$loc || $long){
     my($mouth,$pb)=($$self{mouth},$$self{pushback});
-    $loc .= "\n  To be read again ".ToString(Tokens(@$pb)) if $long && @$pb;
+    my @pb = @$pb;
+    @pb = (@pb[0..50],T_OTHER('...')) if scalar(@pb) > 55;
+    $loc .= "\n  To be read again ".ToString(Tokens(@pb)) if $long && @pb;
     foreach my $frame ( @{$$self{mouthstack}} ){
       my($mouth,$pb)= @$frame;
+      my @pb = @$pb;
+      @pb = (@pb[0..50],T_OTHER('...')) if scalar(@pb) > 55;
       my $ml = $mouth->getLocator($long);
       $loc .= ' '.$ml if $ml;
       last if $loc && !$long;
-      $loc .= "\n  To be read again ".ToString(Tokens(@$pb)) if $long && @$pb;
+      $loc .= "\n  To be read again ".ToString(Tokens(@pb)) if $long && @pb;
     }}
   $loc; }
 
@@ -177,7 +181,7 @@ sub readToken {
 # Unread tokens are assumed to be not-yet expanded.
 sub unread {
   my($self,@tokens)=@_;
-  unshift(@{$$self{pushback}},@tokens); }
+  unshift(@{$$self{pushback}}, map($_->unlist,grep($_,@tokens))); }
 
 # Read the next non-expandable token (expanding tokens until there's a non-expandable one).
 # Note that most tokens pass through here, so be Fast & Clean! readToken is folded in.
@@ -192,9 +196,6 @@ sub readXToken {
   while(1){
     if(!defined($token = (@{$$self{pushback}} ? shift(@{$$self{pushback}}) : $$self{mouth}->readToken() ))){
       return undef unless $$self{autoclose} && $toplevel && @{$$self{mouthstack}};
-
-#      print STDERR "Closing ".Stringify($$self{mouth})."\n ".LaTeXML::Error::stacktrace()."\n";
-
       $self->closeMouth; }		# Next input stream.
     elsif(($cc = $$token[1]) == CC_NOTEXPANDED){ # NOTE: Inlined ->getCatcode
       # Should only occur IMMEDIATELY after expanding \noexpand (by readXToken),
@@ -348,6 +349,7 @@ sub readValue {
   elsif($type eq 'Dimension' ){ $self->readDimension; }
   elsif($type eq 'Glue'  ){ $self->readGlue; }
   elsif($type eq 'MuGlue'){ $self->readMuGlue; }
+  elsif($type eq 'Tokens'){ $self->readTokensValue; }
   elsif($type eq 'any'   ){ $self->readArg; }
 }
 
@@ -360,6 +362,24 @@ sub readRegisterValue {
     $defn->valueOf($defn->readArguments($self)); }
   else {
     $self->unread($token); return; }}
+
+# Apparent behaviour of a token value (ie \toks#=<arg>)
+sub readTokensValue {
+  my($self)=@_;
+  my $token = $self->readNonSpace;
+  if(!defined $token){
+    undef; }
+  elsif($token->getCatcode == CC_BEGIN){
+    $self->readBalanced; }
+  elsif(my $defn = $STATE->lookupDefinition($token)){
+    if($defn->isRegister eq 'Tokens'){
+      $defn->valueOf($defn->readArguments($self)); }
+    elsif($defn->isExpandable){
+      Tokens($defn->invoke($self)); }
+    else {
+      $token; }}		# ?
+  else {
+    $token; }}
 
 #======================================================================
 # some helpers...
@@ -415,7 +435,9 @@ sub readNumber {
   if   (defined (my $n = $self->readNormalInteger    )){ ($s < 0 ? $n->negate : $n); }
   elsif(defined (   $n = $self->readInternalDimension)){ Number($s * $n->valueOf); }
   elsif(defined (   $n = $self->readInternalGlue     )){ Number($s * $n->valueOf); }
-  else{ Warn("Missing number, treated as zero.");        Number(0); }}
+  else{ my $t = $self->readToken;
+	$self->unread($t);
+	Warn(":expected:<number> Missing number, treated as zero at ".ToString($t));        Number(0); }}
 
 # <normal integer> = <internal integer> | <integer constant>
 #   | '<octal constant><one optional space> | "<hexadecimal constant><one optional space>
@@ -458,7 +480,7 @@ sub readFloat {
     $self->unread($token) if $token && $token->getCatcode!=CC_SPACE;
     $n = $string; }
   else {
-    $self->unread($token);
+    $self->unread($token) if $token;
     $n = $self->readNormalInteger;
     $n = $n->valueOf if defined $n; }
   (defined $n ? Float($s*$n) : undef); }
@@ -477,10 +499,10 @@ sub readDimension {
   elsif(defined (   $d = $self->readFactor)           ){ 
     my $unit = $self->readUnit;
     if(!defined $unit){
-      Warn("Illegal unit of measure (pt inserted).");
+      Warn(":expected:<unit> Illegal unit of measure (pt inserted).");
       $unit = 65536; }
     Dimension($s * $d * $unit); }
-  else{ Warn("Missing number, treated as zero.");        Dimension(0); }}
+  else{ Warn(":expected:<number> Missing number, treated as zero.");        Dimension(0); }}
 
 # <unit of measure> = <optional spaces><internal unit>
 #     | <optional true><physical unit><one optional space>
@@ -518,11 +540,11 @@ sub readMuDimension {
   if   (defined (my $m = $self->readFactor        )){
     my $munit = $self->readMuUnit;
     if(!defined $munit){
-      Warn("Illegal unit of measure (mu inserted).");
+      Warn(":expected:<unit> Illegal unit of measure (mu inserted).");
       $munit = $STATE->convertUnit('mu'); }
     MuDimension($s * $m * $munit); }
   elsif(defined (   $m = $self->readInternalMuGlue)){ MuDimension($s * $m->valueOf); }
-  else{ Warn("Expecting mudimen; assuming 0 ");       MuDimension(0); }}
+  else{ Warn(":expected:<mudimen> Expecting mudimen; assuming 0 ");       MuDimension(0); }}
 
 sub readMuUnit {
   my($self)=@_;
@@ -545,7 +567,7 @@ sub readGlue {
   else{
     my $d = $self->readDimension;
     if(!$d){
-      Warn("Missing number, treated as zero."); return Glue(0); }
+      Warn(":expected:<number> Missing number, treated as zero."); return Glue(0); }
     $d = $d->negate if $s < 0;
     my($r1,$f1,$r2,$f2);
     ($r1,$f1) = $self->readRubber if $self->readKeyword('plus');
@@ -565,13 +587,13 @@ sub readRubber {
   elsif($mu){
     my $u = $self->readMuUnit;
     if(!defined $u){
-      Warn("Illegal unit of measure (mu inserted).");
+      Warn(":expected:<unit> Illegal unit of measure (mu inserted).");
       $u = $STATE->convertUnit('mu'); }
     ($s*$f*$u,0); }
   else {
     my $u = $self->readUnit;
     if(!defined $u){
-      Warn("Illegal unit of measure (pt inserted).");
+      Warn(":expected:<unit> Illegal unit of measure (pt inserted).");
       $u = 65536; }
     ($s*$f*$u,0); }}
 
@@ -593,7 +615,7 @@ sub readMuGlue {
   else{
     my $d = $self->readMuDimension;
     if(!$d){
-      Warn("Missing number, treated as zero."); return MuGlue(0); }
+      Warn(":expected:<number> Missing number, treated as zero."); return MuGlue(0); }
     $d = $d->negate if $s < 0;
     my($r1,$f1,$r2,$f2);
     ($r1,$f1) = $self->readRubber(1) if $self->readKeyword('plus');
@@ -617,11 +639,11 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Gullet> -- expands expandable tokens and parses common token sequences.
+C<LaTeXML::Gullet> - expands expandable tokens and parses common token sequences.
 
 =head1 DESCRIPTION
 
-The C<LaTeXML::Gullet> reads tokens (L<LaTeXML::Token>) from a L<LaTeXML::Mouth>.
+A C<LaTeXML::Gullet> reads tokens (L<LaTeXML::Token>) from a L<LaTeXML::Mouth>.
 It is responsible for expanding macros and expandable control sequences,
 if the current definition associated with the token in the L<LaTeXML::State>
 is an L<LaTeXML::Expandable> definition. The C<LaTeXML::Gullet> also provides a
@@ -669,7 +691,7 @@ Returns a string describing the current location in the input stream.
 
 =item C<< $tokens = $gullet->expandTokens($tokens); >>
 
-Return a L<LaTeXML::Tokens> being the expansion of all the tokens in C<$tokens>.
+Return the L<LaTeXML::Tokens> resulting from expanding all the tokens in C<$tokens>.
 This is actually only used in a few circumstances where the arguments to
 an expandable need explicit expansion; usually expansion happens at the right time.
 
@@ -699,7 +721,7 @@ Push the C<@tokens> back into the input stream to be re-read.
 
 =item C<< $token = $gullet->readNonSpace; >>
 
-Read and return the next non-space token from the input, discarding any spaces.
+Read and return the next non-space token from the input after discarding any spaces.
 
 =item C<< $gullet->skipSpaces; >>
 
@@ -721,12 +743,12 @@ the possibly matching token remains in the input.
 
 =item C<< $tokens = $gullet->readMatch(@choices); >>
 
-Read and return whichever of C<@choices> (each should be a L<LaTeXML::Tokens>)
+Read and return whichever of C<@choices> (each are L<LaTeXML::Tokens>)
 matches the input, or undef if none do.
 
 =item C<< $keyword = $gullet->readKeyword(@keywords); >>
 
-Read and return whichever of C<@keywords> (each should be a string) matches the input, or undef
+Read and return whichever of C<@keywords> (each a string) matches the input, or undef
 if none do.  This is similar to readMatch, but case and catcodes are ignored.
 Also, leading spaces are skipped.
 

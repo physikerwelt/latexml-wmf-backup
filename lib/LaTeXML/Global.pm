@@ -21,11 +21,11 @@
 #======================================================================
 package LaTeXML::Global;
 use strict;
-use XML::LibXML;
+use LaTeXML::Common::XML;
 use Time::HiRes;
 
 use base qw(Exporter);
-our @EXPORT = ( 
+our  @EXPORT = ( 
 	       # Global STATE; This gets bound by LaTeXML.pm
 	       qw( *STATE),
 	       # Catcode constants
@@ -37,14 +37,18 @@ our @EXPORT = (
 	       # Token constructors
 	       qw( &T_BEGIN &T_END &T_MATH &T_ALIGN &T_PARAM &T_SUB &T_SUPER &T_SPACE 
 		   &T_LETTER &T_OTHER &T_ACTIVE &T_COMMENT &T_CS
+		   &T_CR
 		   &Token &Tokens
-		   &Tokenize &TokenizeInternal &Explode &UnTeX),
+		   &Tokenize &TokenizeInternal &Explode &UnTeX
+		   &StartSemiverbatim &EndSemiverbatim),
 	       # Number & Dimension constructors
 	       qw( &Number &Float &Dimension &MuDimension &Glue &MuGlue &Pair &PairList),
 	       # Error & Progress reporting
 	       qw( &NoteProgress &NoteBegin &NoteEnd &Fatal &Error &Warn ),
 	       # And some generics
-	       qw(&Stringify &ToString  &Equals)
+	       qw(&Stringify &ToString  &Equals),
+	       # And, anything exported from LaTeXML::Common::XML
+	       @LaTeXML::Common::XML::EXPORT
 );
 
 #======================================================================
@@ -63,6 +67,7 @@ use constant CC_SUPER   =>  7;  sub T_SUPER()  { bless ['^',   7], 'LaTeXML::Tok
 use constant CC_SUB     =>  8;  sub T_SUB()    { bless ['_',   8], 'LaTeXML::Token'; }
 use constant CC_IGNORE  =>  9;
 use constant CC_SPACE   => 10;  sub T_SPACE()  { bless [' ',  10], 'LaTeXML::Token'; }
+                                sub T_CR()     { bless ["\n", 10], 'LaTeXML::Token'; }
 use constant CC_LETTER  => 11;  sub T_LETTER   { bless [$_[0],11], 'LaTeXML::Token'; }
 use constant CC_OTHER   => 12;  sub T_OTHER    { bless [$_[0],12], 'LaTeXML::Token'; }
 use constant CC_ACTIVE  => 13;  sub T_ACTIVE   { bless [$_[0],13], 'LaTeXML::Token'; }
@@ -101,13 +106,26 @@ sub TokenizeInternal {
   local $LaTeXML::STATE = $STY_CATTABLE;
   LaTeXML::Mouth->new($string)->readTokens; }
 
+sub StartSemiverbatim() {
+  $LaTeXML::STATE->pushFrame;
+  # include space!
+  map($LaTeXML::STATE->assignCatcode($_=>CC_OTHER,'local'),'^','_','@','~','&','$','#','%',"'",' ');
+  $LaTeXML::STATE->assignCatcode('math:\''=>0,'local');
+  return; }
+
+sub EndSemiverbatim() {  $LaTeXML::STATE->popFrame; }
+
 #======================================================================
 # Token List constructors.
 
 # Return a LaTeXML::Tokens made from the arguments (tokens)
 sub Tokens {
-  map( ((ref $_) && $_->isaToken)|| Fatal("Expected Token, got ".Stringify($_)), @_);
-  LaTeXML::Tokens->new(@_); }
+  my(@tokens)=@_;
+  # Flatten any Tokens to Token's
+  @tokens = map( ( (((ref $_)||'') eq 'LaTeXML::Tokens') ? $_->unlist : $_), @tokens);
+  # And complain about any remaining Non-Token's
+  map( ((ref $_) && $_->isaToken)|| Fatal(":misdefined:<unknown> Expected Token, got ".Stringify($_)), @tokens);
+  LaTeXML::Tokens->new(@tokens); }
 
 # Explode a string into a list of tokens w/catcode OTHER (except space).
 sub Explode {
@@ -116,7 +134,7 @@ sub Explode {
 
 sub UnTeX {
   my($thing)=@_;
-  ToString(Tokens(ref $thing ? $thing->revert : Explode($thing))); }
+  (defined $thing ? ToString(Tokens(ref $thing ? $thing->revert : Explode($thing))) : undef); }
 
 #======================================================================
 # Constructors for number and dimension types.
@@ -163,6 +181,9 @@ sub Fatal {
   die $message; 
   return; }
 
+# Note that "100" is hardwired into TeX, The Program!!!
+our $MAXERRORS=100;
+
 # Should be fatal if strict is set, else warn.
 sub Error {
   my($msg)=@_;
@@ -172,6 +193,8 @@ sub Error {
     $LaTeXML::Global::STATE->noteStatus('error');
     print STDERR LaTeXML::Error::generateMessage("Error",$msg,1,"Continuing... Expect trouble.\n")
       unless $LaTeXML::Global::STATE->lookupValue('VERBOSITY') < -1; }
+  if(($LaTeXML::Global::STATE->getStatus('error')||0) > $MAXERRORS){
+    Fatal(":too_many:$MAXERRORS Too many errors!"); }
   return; }
 
 sub Warn {
@@ -194,16 +217,15 @@ sub Stringify {
   # Have to handle LibXML stuff explicitly (unless we want to add methods...?)
   elsif($object->isa('XML::LibXML::Node')){
     if($object->nodeType == XML_ELEMENT_NODE){ 
-      my $nodename = $object->localname;
-      my $ns    = $object->namespaceURI;
-      if($ns && ($ns=$LaTeXML::Global::STATE->getModel->getNamespacePrefix($ns))){
-	$nodename = "$ns:$nodename"; }
+      my $tag = $LaTeXML::Global::STATE->getModel->getNodeQName($object);
       my $attributes ='';
       foreach my $attr ($object->attributes){
 	my $name = $attr->nodeName;
 	next if $name =~ /^_/;
-	$attributes .= ' '. $name. "=\"".$attr->getData."\""; }
-      "<".$nodename.$attributes. ($object->hasChildNodes ? ">..." : "/>");
+	my $val = $attr->getData;
+	$val = substr($val,0,30)."..." if length($val)>35;
+	$attributes .= ' '. $name. "=\"".$val."\""; }
+      "<".$tag.$attributes. ($object->hasChildNodes ? ">..." : "/>");
     }
     elsif($object->nodeType == XML_TEXT_NODE){
       "XMLText[".$object->data."]"; }
@@ -231,7 +253,7 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Global> -- global exports used within LaTeXML, and in Packages.
+C<LaTeXML::Global> - global exports used within LaTeXML, and in Packages.
 
 =head1 SYNOPSIS
 
@@ -259,18 +281,25 @@ of L<LaTeXML> during processing.
 
 =item C<< $catcode = CC_ESCAPE; >>
 
-A constant for the escape category code; and also:
-C<CC_BEGIN>, C<CC_END>, C<CC_MATH>, C<CC_ALIGN>, C<CC_EOL>, C<CC_PARAM>, C<CC_SUPER>,
-C<CC_SUB>, C<CC_IGNORE>, C<CC_SPACE>, C<CC_LETTER>, C<CC_OTHER>, C<CC_ACTIVE>, C<CC_COMMENT>, 
-C<CC_INVALID>, C<CC_CS>, C<CC_NOTEXPANDED>.  [The last 2 are (apparent) extensions, 
+Constants for the category codes:
+
+  CC_BEGIN, CC_END, CC_MATH, CC_ALIGN, CC_EOL,
+  CC_PARAM, CC_SUPER, CC_SUB, CC_IGNORE,
+  CC_SPACE, CC_LETTER, CC_OTHER, CC_ACTIVE,
+  CC_COMMENT, CC_INVALID, CC_CS, CC_NOTEXPANDED.
+
+[The last 2 are (apparent) extensions,
 with catcodes 16 and 17, respectively].
 
 =item C<< $token = Token($string,$cc); >>
 
-Creates a L<LaTeXML::Token> with the given content and catcode.  The following shorthand versions
-are also exported for convenience:
-C<T_BEGIN>, C<T_END>, C<T_MATH>, C<T_ALIGN>, C<T_PARAM>, C<T_SUB>, C<T_SUPER>, C<T_SPACE>, 
-C<T_LETTER($letter)>, C<T_OTHER($char)>, C<T_ACTIVE($char)>, C<T_COMMENT($comment)>, C<T_CS($cs)>
+Creates a L<LaTeXML::Token> with the given content and catcode.
+The following shorthand versions are also exported for convenience:
+
+  T_BEGIN, T_END, T_MATH, T_ALIGN, T_PARAM,
+  T_SUB, T_SUPER, T_SPACE, T_LETTER($letter),
+  T_OTHER($char), T_ACTIVE($char),
+  T_COMMENT($comment), T_CS($cs)
 
 =item C<< $tokens = Tokens(@token); >>
 
@@ -288,6 +317,10 @@ returning a L<LaTeXML::Tokens>.
 =item C<< @tokens = Explode($string); >>
 
 Returns a list of the tokens corresponding to the characters in C<$string>.
+
+=item C<< StartSemiVerbatim(); ... ; EndSemiVerbatim(); >>
+
+Desable disable most TeX catcodes.
 
 =back
 
@@ -376,7 +409,7 @@ Prints C<$message> unless the verbosity level below 0.
 
 =item C<< Stringify($object); >>
 
-Returns a short string identifying C<$object>, for debugging purposes.
+Returns a short string identifying C<$object>, for debugging.
 Works on any values and objects, but invokes the stringify method on 
 blessed objects.
 More informative than the default perl conversion to a string.

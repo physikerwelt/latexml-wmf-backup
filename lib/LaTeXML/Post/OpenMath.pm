@@ -25,42 +25,50 @@
 # ================================================================================
 package LaTeXML::Post::OpenMath;
 use strict;
-use LaTeXML::Util::LibXML;
-use LaTeXML::Post;
-our @ISA = (qw(LaTeXML::Post::Processor));
+use LaTeXML::Common::XML;
+use base qw(LaTeXML::Post);
 
 our $omURI = "http://www.openmath.org/OpenMath";
 
 sub process {
   my($self,$doc)=@_;
-  $doc->documentElement->setNamespace($omURI,'om',0);
-  my @math = $self->find_math_nodes($doc);
-  $self->Progress("Converting ".scalar(@math)." formulae");
-  foreach my $math (@math){
-    my ($xmath) = $math->getChildrenByTagNameNS($self->getNamespace,'XMath');
-    my $ommath = $self->processNode($xmath);
-    $math->appendChild($ommath); }
+  local $LaTeXML::Post::OpenMath::DOCUMENT = $doc;
+  if(my @maths = $self->find_math_nodes($doc)){
+    $self->Progress($doc,"Converting ".scalar(@maths)." formulae");
+    $doc->addNamespace($omURI,'om');
+    foreach my $math (@maths){
+      $self->processNode($doc,$math); }
+    $doc->adjust_latexml_doctype('OpenMath'); } # Add OpenMath if LaTeXML dtd.
   $doc; }
 
-# ================================================================================
-sub find_math_nodes {
-  my($self,$doc)=@_;
-  $doc->getElementsByTagNameNS($self->getNamespace,'Math'); }
+sub find_math_nodes { $_[1]->findnodes('//ltx:Math'); }
 
-# ================================================================================
+sub getQName {
+  $LaTeXML::Post::OpenMath::DOCUMENT->getQName(@_); }
 
+# $self->processNode($doc,$mathnode) is the top-level conversion
+# It converts the XMath within $mathnode, and adds it to the $mathnode,
 sub processNode {
-  my($self,$math)=@_;
-  my $ommath=new_node($omURI,'OMOBJ',[]);
+  my($self,$doc,$math)=@_;
+  my $mode = $math->getAttribute('mode')||'inline';
+  my $xmath = $doc->findnode('ltx:XMath',$math);
+  my $style = ($mode eq 'display' ? 'display' : 'text');
+  $doc->addNodes($math,$self->translateNode($doc,$xmath,$style,'ltx:Math')); }
 
-  # NOTE: Should be only 1 node by now?
-  my @nodes= element_nodes($math);
-  append_nodes($ommath, map(Expr($_), @nodes));
-
-  $ommath; }
+sub translateNode {
+  my($self,$doc,$xmath,$style,$embedding)=@_;
+  my @trans = Expr($xmath);
+  # Wrap unless already embedding within MathML.
+  ($embedding =~ /^om:/ ? @trans : ['om:OMOBJ',{},@trans]); }
 
 sub getEncodingName { 'OpenMath'; }
 # ================================================================================
+
+sub getTokenMeaning {
+  my($node)=@_;
+  my $m = $node->getAttribute('meaning') || $node->getAttribute('name')
+    || $node->textContent;
+  (defined $m ? $m : '?'); }
 
 sub getTokenName {
   my($node)=@_;
@@ -77,42 +85,45 @@ sub DefOpenMath {
 sub Expr {
   my($node)=@_;
   return OMError("Missing Subexpression") unless $node;
-  my $tag = $node->localname;
-  if($tag eq 'XMDual'){
+  my $tag = getQName($node);
+  if($tag eq 'ltx:XMath'){
+    my($item,@rest)=  element_nodes($node);
+    print STDERR "Warning! got extra nodes for content!\n" if @rest;
+    Expr($item); }
+  elsif($tag eq 'ltx:XMDual'){
     my($content,$presentation) = element_nodes($node);
     Expr($content); }
-  elsif($tag eq 'XMWrap'){
+  elsif($tag eq 'ltx:XMWrap'){
     # Note... Error?
-    Row(grep($_,map(Expr($_),element_nodes($node)))); }
-  elsif($tag eq 'XMApp'){
+##    Row(grep($_,map(Expr($_),element_nodes($node)))); 
+    (); }
+  elsif($tag eq 'ltx:XMApp'){
     my($op,@args) = element_nodes($node);
     return OMError("Missing Operator") unless $op;
-    my $name =  getTokenName($op);
+    my $name =  getTokenMeaning($op);
     my $pos  =  $op->getAttribute('role') || '?';
 
     my $sub = $$OMTable{"Apply:$pos:$name"} || $$OMTable{"Apply:?:$name"} 
       || $$OMTable{"Apply:$pos:?"} || $$OMTable{"Apply:?:?"};
     &$sub($op,@args); }
-  elsif($tag eq 'XMTok'){
-    my $name =  getTokenName($node);
+  elsif($tag eq 'ltx:XMTok'){
+    my $name =  getTokenMeaning($node);
     my $pos  =  $node->getAttribute('role') || '?';
     my $sub = $$OMTable{"Token:$pos:$name"} || $$OMTable{"Token:?:$name"} 
       || $$OMTable{"Token:$pos:?"} || $$OMTable{"Token:?:?"};
     &$sub($node); }
-  elsif($tag eq 'XMHint'){
-    undef; }
+  elsif($tag eq 'ltx:XMHint'){
+    (); }
   else {
-    Node('OMSTR',[$node->textContent]); }}
+    ['om:OMSTR',{},$node->textContent]; }}
 
 # ================================================================================
 # Helpers
-sub Node {
-  my($tag,$content,%attr)=@_;
-  new_node($omURI,"om:$tag",$content,%attr); }
-
 sub OMError {
   my($msg)=@_;
-  Node('OME',Node('OMS',[],name=>'unexpected', cd=>'moreerrors'),Node('OMS',$msg)); }
+  ['om:OME',{},
+   ['om:OMS',{name=>'unexpected', cd=>'moreerrors'}],
+   ['om:OMS',{},$msg]]; }
 # ================================================================================
 # Tokens
 
@@ -120,24 +131,24 @@ sub OMError {
 # Here, we simply assume that the token is a variable if there's no CD!!!
 DefOpenMath('Token:?:?',    sub { 
   my($token)=@_;
-  my $name = getTokenName($token);
+  my $name = getTokenMeaning($token);
   my $cd = $token->getAttribute('omcd');
   if($cd){
-    Node('OMS',[], name=>$name, cd=>$cd); }
+    ['om:OMS',{name=>$name, cd=>$cd}]; }
   else {
-    Node('OMV',[], name=>$name); }});
+    ['om:OMV',{name=>$name}]; }});
 
 # NOTE: Presence of '.' distinguishes float from int !?!?
 DefOpenMath('Token:NUMBER:?',sub {
   my($node)=@_;
-  my $value = getTokenName($node); # name attribute (may) holds actual value.
+  my $value = getTokenMeaning($node); # name attribute (may) holds actual value.
   if($value =~ /\./){
-    Node('OMF',[],dec=>$value); }
+    ['om:OMF',{dec=>$value}]; }
   else {
-    Node('OMI',$value); }});
+    ['om:OMI',{},$value]; }});
 
 DefOpenMath("Token:?:\x{2062}", sub {
-    Node('OMS',[], name=>'times', cd=>'arith1'); });
+  ['om:OMS',{name=>'times', cd=>'arith1'}]; });
 
 # ================================================================================
 # Applications.
@@ -146,7 +157,7 @@ DefOpenMath("Token:?:\x{2062}", sub {
 
 DefOpenMath('Apply:?:?', sub {
   my($op,@args)=@_;
-  Node('OMA',[map(Expr($_),$op,@args)]); });
+  ['om:OMA',{},map(Expr($_),$op,@args)]; });
 
 # NOTE: No support for OMATTR here...
 
@@ -154,9 +165,10 @@ DefOpenMath('Apply:?:?', sub {
 # Currently, no such construct is created in LaTeXML...
 DefOpenMath('Apply:LambdaBinding:?', sub {
   my($op,$expr,@vars)=@_;
-  Node('OMBIND',[Node('OMS',[],name=>"lambda", cd=>'fns1'),
-		 Node('OMBVAR',[map(Expr($_),@vars)]), # Presumably, these yield OMV
-		 Expr($expr)]); });
+  ['om:OMBIND',{},
+   ['om:OMS',{name=>"lambda", cd=>'fns1'},
+    ['om:OMBVAR',{},map(Expr($_),@vars)], # Presumably, these yield OMV
+    Expr($expr)]]; });
 
 # ================================================================================
 1;

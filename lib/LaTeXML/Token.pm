@@ -70,6 +70,7 @@ sub getCatcode { $_[0]->[1]; }
 # Defined so a Token or Tokens can be used interchangeably.
 sub unlist { ($_[0]); }
 sub getLocator { ''; }
+sub getSource  { ''; }
 
 our @NEUTRALIZABLE=(0,0,0,1,
 		    1,0,1,1,
@@ -187,8 +188,18 @@ sub readToken {
   return unless @$self;
   shift(@$self); }
 
-sub getLocator { ''; }
+sub readTokens {
+  my($self,$until)=@_;
+  my @tokens=();
+  while(defined(my $token = $self->readToken())){
+    last if $until and $token->getString eq $until->getString;
+    push(@tokens,$token); }
+  while(@tokens && $tokens[$#tokens]->getCatcode == CC_SPACE){ # Remove trailing space
+    pop(@tokens); }
+  Tokens(@tokens); }
 
+sub getLocator { ''; }
+sub getSource  { ''; }
 #**********************************************************************
 1;
 
@@ -198,7 +209,8 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Token>, C<LaTeXML::Tokens>. -- representation of tokens.
+C<LaTeXML::Token> - representation of a token,
+and C<LaTeXML::Tokens>, representing lists of tokens.
 
 =head1 DESCRIPTION
 
@@ -242,7 +254,8 @@ Return the string or character part of the C<$token>.
 
 =item C<< $code = $token->getCharcode; >>
 
-Return the character code of the character part of the C<$token>, or 256 if it is a control sequence.
+Return the character code of the character part of the C<$token>,
+or 256 if it is a control sequence.
 
 =item C<< $code = $token->getCatcode; >>
 
@@ -256,6 +269,12 @@ undef if none.
 =back
 
 =head2 Tokens methods
+
+=begin latex
+
+\label{LaTeXML::Tokens}
+
+=end latex
 
 The following methods are specific to C<LaTeXML::Tokens>.
 

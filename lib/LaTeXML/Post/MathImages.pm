@@ -14,29 +14,27 @@ package LaTeXML::Post::MathImages;
 use strict;
 use base qw(LaTeXML::Post::LaTeXImages);
 
+sub new {
+  my($class,%options)=@_;
+  $options{resourceDirectory}='mi' unless defined $options{resourceDirectory};
+  $options{resourcePrefix}='mi'    unless defined $options{resourcePrefix};
+  $class->SUPER::new(%options); }
+
 #======================================================================
-sub image_prefix { 'mi'; }
 
 # Return the list of Math nodes.
-sub find_nodes {
-  my($self,$doc)=@_;
-  $doc->getElementsByTagNameNS($self->getNamespace,'Math'); }
+sub findTeXNodes { $_[1]->findnodes('//ltx:Math'); }
 
 # Return the TeX string to format the image for this node.
-sub extract_tex {
-  my($self,$node)=@_;
+sub extractTeX {
+  my($self,$doc,$node)=@_;
   my $mode = uc($node->getAttribute('mode')||'INLINE');
-  my $tex = $node->getAttribute('tex') || '';
+  my $tex = $node->getAttribute('tex');
+  return undef unless defined $tex;
   $tex =~ s/\%[^\n]*\n//gs;	# Strip comments
-  $tex =~ s/\n//g;		# and stray CR's
-  "\\begin$mode $tex\\end$mode"; }
-
-# Record the math image's (relative) filename, width & height for this node.
-sub set_image {
-  my($self,$node,$path,$width,$height)=@_;
-  $node->setAttribute('imagesrc',$path);
-  $node->setAttribute('imagewidth',$width);
-  $node->setAttribute('imageheight',$height); }
+#  $tex =~ s/\n//g;		# and stray CR's
+  $mode = 'DISPLAY' if $tex=~/^\s*\\displaystyle/;
+  ($tex =~ /^\s*$/ ? undef : "\\begin$mode $tex\\end$mode"); }
 
 # Definitions needed for processing inline & display math images
 sub preamble {
@@ -50,20 +48,19 @@ sub preamble {
   # We'll assume the xheight is 6pts?
 
 return <<EOPreamble;
-\\newbox\\sizebox
 \\def\\AdjustInline{%
-  \\\@tempdima=\\ht\\sizebox\\advance\\\@tempdima-6pt\\advance\\\@tempdima-\\dp\\sizebox
+  \\\@tempdima=\\ht\\lxImageBox\\advance\\\@tempdima-6pt\\advance\\\@tempdima-\\dp\\lxImageBox
   \\ifdim\\\@tempdima>0pt
-    \\advance\\\@tempdima\\dp\\sizebox\\dp\\sizebox=\\\@tempdima
+    \\advance\\\@tempdima\\dp\\lxImageBox\\dp\\lxImageBox=\\\@tempdima
   \\else\\ifdim\\\@tempdima>0pt
-     \\advance\\\@tempdima-\\ht\\sizebox\\ht\\sizebox=-\\\@tempdima
+     \\advance\\\@tempdima-\\ht\\lxImageBox\\ht\\lxImageBox=-\\\@tempdima
   \\fi\\fi}
 % For Inline, typeset in box, then extend box so height=depth; then we can center it
-\\def\\beginINLINE{\\setbox\\sizebox\\hbox\\bgroup\\(}
-\\def\\endINLINE{\\)\\egroup\\AdjustInline\\fbox{\\copy\\sizebox}}
+\\def\\beginINLINE{\\lxBeginImage\\(}
+\\def\\endINLINE{\\)\\lxEndImage\\AdjustInline\\lxShowImage}
 % For Display, same as inline, but set displaystyle.
-\\def\\beginDISPLAY{\\setbox\\sizebox\\hbox\\bgroup\\(\\displaystyle}
-\\def\\endDISPLAY{\\)\\egroup\\AdjustInline\\fbox{\\copy\\sizebox}}
+\\def\\beginDISPLAY{\\lxBeginImage\\(\\displaystyle}
+\\def\\endDISPLAY{\\)\\lxEndImage\\AdjustInline\\lxShowImage}
 EOPreamble
 }
 #======================================================================

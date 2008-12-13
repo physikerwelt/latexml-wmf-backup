@@ -17,35 +17,51 @@ use LaTeXML::Global;
 use LaTeXML::Definition;
 use LaTeXML::Parameters;
 use LaTeXML::Util::Pathname;
+use Text::Balanced;
 use base qw(Exporter);
-our @EXPORT = (qw(&DefExpandable &DefMacro
-		  &DefPrimitive  &DefRegister
-		  &DefConstructor &DefMath &dualize_arglist
-		  &DefEnvironment
-		  &DefRewrite &DefMathRewrite
-		  &DefLigature &DefMathLigature
-		  &RequirePackage &FindFile
-		  &RawTeX
-		  &Tag &DocType &RegisterNamespace
-		  &convertLaTeXArgs
-		  &UTF),
+our @EXPORT = (qw(&DefExpandable
+		  &DefMacro &DefMacroI
+		  &DefPrimitive  &DefPrimitiveI &DefRegister &DefRegisterI
+		  &DefConstructor &DefConstructorI
+		  &dualize_arglist
+		  &DefMath &DefMathI &DefEnvironment &DefEnvironmentI
+		  &convertLaTeXArgs),
 
-	       # Lower-level support for writing definitions.
+	       # Class, Package and File loading.
+	       qw(&RequirePackage &LoadClass &FindFile
+		  &DeclareOption &PassOptions &ProcessOptions &ExecuteOptions
+		  &AddToMacro),
+
+	       # Counter support
+	       qw(&NewCounter &CounterValue &StepCounter &RefStepCounter &RefStepID &ResetCounter
+		  &GenerateID),
+
+	       # Document Model
+	       qw(&Tag &DocType &RelaxNGSchema &RegisterNamespace),
+
+	       # Document Rewriting
+	       qw(&DefRewrite &DefMathRewrite
+		  &DefLigature &DefMathLigature),
+
+	       # Mid-level support for writing definitions.
+	       qw(&Expand &Invocation &Digest
+		  &RawTeX &Let),
+
+	       # Support for structured/argument readers
+	       qw(&ReadParameters &DefParameterType  &DefColumnType),
+
 	       # Access to State
 	       qw(&LookupValue &AssignValue
 		  &PushValue &PopValue &UnshiftValue &ShiftValue
 		  &LookupCatcode &AssignCatcode
-		 &LookupMeaning &LookupDefinition &InstallDefinition &Let),
+		  &LookupMeaning &LookupDefinition &InstallDefinition),
+
+	       # Random low-level token or string operations.
+	       qw(&CleanLabel &CleanIndexKey &CleanBibKey &CleanURL
+		  &UTF
+		  &roman &Roman),
 	       # Math & font state.
 	       qw(&MergeFont),
-	       # Explicit digestion
-	       qw(&Digest),
-	       # Support for structured/argument readers
-	       qw(&DefParameterType
-		  &StartSemiverbatim &EndSemiverbatim
-		  &Expand &Invocation &ReadParameters),
-	       # Random low-level token operations.
-	       qw(&roman &Roman),
 
 	       qw(&CheckOptions),
 
@@ -67,25 +83,51 @@ sub UTF {
   my($code)=@_;
   pack('U',$code); }
 
+sub coerceCS {
+  my($cs)=@_;
+  $cs = T_CS($cs) unless ref $cs;
+  $cs = T_CS(ToString($cs)) unless ref $cs eq 'LaTeXML::Token';
+  $cs;}
+
 sub parsePrototype {
   my($proto)=@_;
   my $oproto = $proto;
-  $proto =~ s/^(\\?[a-zA-Z@]+|\\?.)//; # Match a cs, env name,...
-  my($cs,@junk) = TokenizeInternal($1)->unlist;
-  Fatal("Definition prototype doesn't have proper control sequence:"
-	.($cs?$cs->toString:'')." then ".join('',map(ToString($_),@junk))." in \"$oproto\" ") if @junk;
+  my $cs;
+  if($proto =~ s/^\\csname\s+(.*)\\endcsname//){
+    $cs = T_CS('\\'.$1); }
+  elsif($proto =~ s/^(\\[a-zA-Z@]+)//){ # Match a cs
+    $cs = T_CS($1); }
+  elsif($proto =~ s/^(\\.)//){ # Match a single char cs, env name,...
+    $cs = T_CS($1); }
+  elsif($proto =~ s/^(.)//){ # Match an active char
+    ($cs) = TokenizeInternal($1)->unlist; }
+  else {
+    Fatal(":misdefined:$proto Definition prototype doesn't have proper control sequence: \"$proto\""); }
   $proto =~ s/^\s*//;
   ($cs, parseParameters($proto,$cs)); }
 
 # Convert a LaTeX-style argument spec to our Package form.
 # Ie. given $nargs and $optional, being the two optional arguments to
 # something like \newcommand, convert it to the form we use
-sub convertLaTeXArgs {
+sub XXXXconvertLaTeXArgs {
   my($nargs,$optional)=@_;
-  $nargs = (defined $nargs ? $nargs->toString : 0);
+  $nargs = (ref $nargs ? $nargs->toString : $nargs || 0);
   my $default = ($optional ? $optional->toString : undef);
   join('', ($optional ? ($default ? "[Default:$default]" : "[]") : ''),
        map('{}',1..($optional ? $nargs-1 : $nargs))); }
+
+sub convertLaTeXArgs {
+  my($nargs,$optional)=@_;
+  $nargs = $nargs->toString if ref $nargs;
+  $nargs = 0 unless $nargs;
+  my @params = ();
+  if($optional){
+    push(@params,LaTeXML::Parameters::newParameter('Optional',
+						  "[Default:".$optional->toString."]",
+						  extra=>[$optional,undef]));
+    $nargs--; }
+  push(@params,map(LaTeXML::Parameters::newParameter('Plain','{}'), 1..$nargs));
+  LaTeXML::Parameters->new(@params); }
 
 #======================================================================
 # Convenience functions for writing definitions.
@@ -96,7 +138,7 @@ sub AssignValue  { $STATE->assignValue(@_); return; }
 sub PushValue    { $STATE->pushValue(@_);  return; }
 sub PopValue     { $STATE->popValue(@_); }
 sub UnshiftValue { $STATE->unshiftValue(@_);  return; }
-sub ShiftValue { $STATE->shiftValue(@_); }
+sub ShiftValue   { $STATE->shiftValue(@_); }
 sub LookupCatcode{ $STATE->lookupCatcode(@_); }
 sub AssignCatcode{ $STATE->assignCatcode(@_); return; }
 
@@ -110,12 +152,13 @@ sub Let {
   $STATE->assignMeaning($token1,$STATE->lookupMeaning($token2)); 
   return; }
 
-sub Digest       { $STATE->getStomach->digest(@_); }
+sub Digest {
+  $STATE->getStomach->digest(map((ref $_ ? $_ : Tokenize($_)),@_)); }
 
 sub ReadParameters {
   my($gullet,$spec)=@_;
   my $for = T_OTHER("Anonymous");
-  my $parm = LaTeXML::Parameters::parseParameters($spec,$for);
+  my $parm = parseParameters($spec,$for);
   $parm->readArguments($gullet,$for); }
 
 # Merge the current font with the style specifications
@@ -144,31 +187,219 @@ sub roman { Explode(roman_aux(@_)); }
 sub Roman { Explode(uc(roman_aux(@_))); }
 
 #======================================================================
+# Cleaners
+#======================================================================
+# Gradually rethink all these and clarify.
+#  Are they intended to be valid ID's (or fragment ids?)
+
+sub CleanLabel {
+  my($label,$prefix)=@_;
+  my $key = ToString($label);
+  $key =~ s/\s+/_/g;
+  ($prefix||"LABEL").":".$key; }
+
+sub CleanIndexKey {
+  my($key)=@_;
+  $key = ToString($key);
+  $key =~ s/[^a-zA-Z0-9]//g;
+  $key =~ tr|A-Z|a-z|;
+  $key; }
+
+# used as id.
+sub CleanBibKey {
+  my($key)=@_;
+  $key = lc(ToString($key));
+  $key =~ s/\s//g;
+  $key; }
+
+sub CleanURL {
+  my($url)=@_;
+  $url = ToString($url);
+  $url =~ s/\\~{}/~/g;
+  $url; }
+
+#======================================================================
 # Defining new Control-sequence Parameter types.
 #======================================================================
 
-our $parameter_options = {nargs=>1,reversion=>1,optional=>1,novalue=>1,semiverbatim=>1};
+our $parameter_options = {nargs=>1,reversion=>1,optional=>1,novalue=>1,
+			  semiverbatim=>1,undigested=>1};
 sub DefParameterType {
   my($type,$reader,%options)=@_;
   CheckOptions("DefParameterType $type",$parameter_options,%options);
   $LaTeXML::Parameters::PARAMETER_TABLE{$type}={reader=>$reader,%options};
   return; 
 }
+
+sub DefColumnType {
+  my($proto,$expansion)=@_;
+  $proto =~ s/^(.)//;
+  my $char = $1;
+  $proto =~ s/^\s*//;
+  my $params = parseParameters($proto,$char);
+  $expansion = TokenizeInternal($expansion) unless ref $expansion;
+  DefMacroI(T_CS('\NC@rewrite@'.$char),$params,$expansion); }
+
+#======================================================================
+# Counters
+#======================================================================
+# This is modelled on LaTeX's counter mechanisms, but since it also
+# provides support for ID's, even where there is no visible reference number,
+# it is defined in genera.
+# These id's should be both unique, and parallel the visible reference numbers
+# (as much as possible).  Also, for consistency, we add id's to unnumbered
+# document elements (eg from \section*); this requires an additional counter
+# (eg. UNsection) and  mechanisms to track it.
+
+# Defines a new counter named $ctr.
+# If $within is defined, $ctr will be reset whenever $within is incremented.
+# Keywords:
+#  idprefix : specifies a prefix to be used in formatting ID's for document structure elements
+#           counted by this counter.  Ie. subsection 3 in section 2 might get: id="S2.SS3"
+#  idwithin : specifies that the ID is composed from $idwithin's ID,, even though
+#           the counter isn't numbered within it.  (mainly to avoid duplicated ids)
+#   nested : a list of counters that correspond to scopes which are "inside" this one.
+#           Whenever any definitions scoped to this counter are deactivated,
+#           the inner counter's scopes are also deactivated.
+#           NOTE: I'm not sure this is even a sensible implementation,
+#           or why inner should be different than the counters reset by incrementing this counter.
+
+sub NewCounter { 
+  my($ctr,$within,%options)=@_;
+  my $unctr = "UN$ctr";		# UNctr is counter for generating ID's for UN-numbered items.
+  DefRegisterI(T_CS("\\c\@$ctr"),undef,Number(0));
+  AssignValue("\\c\@$ctr"=>Number(0),'global');
+  AssignValue("\\cl\@$ctr"=>Tokens(),'global') unless LookupValue("\\cl\@$ctr");
+  DefRegisterI(T_CS("\\c\@$unctr"),undef,Number(0));
+  AssignValue("\\c\@$unctr"=>Number(0),'global');
+  AssignValue("\\cl\@$unctr"=>Tokens(),'global') unless LookupValue("\\cl\@$unctr");
+  AssignValue("\\cl\@$within" =>
+	      Tokens(T_CS($ctr),T_CS($unctr),
+		     (LookupValue("\\cl\@$within") ? LookupValue("\\cl\@$within")->unlist :())),
+	      'global') if $within;
+  AssignValue("\\cl\@UN$within" =>
+	      Tokens(T_CS($unctr),
+		     (LookupValue("\\cl\@UN$within") ? LookupValue("\\cl\@UN$within")->unlist :())),
+	      'global') if $within;
+  AssignValue('nested_counters_'.$ctr =>$options{nested}) if $options{nested};
+  DefMacroI(T_CS("\\the$ctr"),undef,"\\arabic{$ctr}",scope=>'global');
+  my $prefix = $options{idprefix};
+  AssignValue('@ID@prefix@'.$ctr=>$prefix) if $prefix;
+  $prefix = LookupValue('@ID@prefix@'.$ctr) unless $prefix;
+  if(defined $prefix){
+    if(my $idwithin = $options{idwithin} || $within){
+      DefMacroI(T_CS("\\the$ctr\@ID"),undef,
+	       "\\expandafter\\ifx\\csname the$idwithin\@ID\\endcsname\\\@empty"
+	       ."\\else\\csname the$idwithin\@ID\\endcsname.\\fi"
+	       ." $prefix\\csname \@$ctr\@ID\\endcsname",
+		scope=>'global'); }
+    else {
+      DefMacroI(T_CS("\\the$ctr\@ID"),undef,"$prefix\\csname \@$ctr\@ID\\endcsname",
+		scope=>'global'); }
+    DefMacroI(T_CS("\\\@$ctr\@ID"),undef,"0",scope=>'global'); }
+  return; }
+
+sub CounterValue {
+  my($ctr)=@_;
+  $ctr = $ctr->toString if ref $ctr;
+  my $value = LookupValue('\c@'.$ctr);
+  if(!$value){
+    Warn(":expected:<counter> Counter $ctr was not defined; assuming 0");
+    $value = Number(0); }
+  $value; }
+
+sub StepCounter {
+  my($ctr)=@_;
+  my $value = CounterValue($ctr);
+  AssignValue("\\c\@$ctr"=>$value->add(Number(1)),'global');
+  # and reset any within counters!
+  if(my $nested = LookupValue("\\cl\@$ctr")){
+    foreach my $c ($nested->unlist){
+      ResetCounter($c->toString); }}
+  Expand(T_CS("\\the$ctr")); }
+
+# HOW can we retract this?
+sub RefStepCounter {
+  my($ctr)=@_;
+  my $v = StepCounter($ctr);
+  DefMacroI(T_CS("\\\@$ctr\@ID"),undef, Tokens(Explode(LookupValue('\c@'.$ctr)->valueOf)),
+	    scope=>'global');
+  my $id = Expand(T_CS("\\the$ctr\@ID"));
+  DefMacroI(T_CS('\@currentlabel'),undef,$v);
+  DefMacroI(T_CS('\@currentID'),undef,$id);
+
+  # Any scopes activated for previous value of this counter (& any nested counters) must be removed.
+  # This may also include scopes activated for \label
+  deactivateCounterScope($ctr);
+  # And install the scope (if any) for this reference number.
+  AssignValue(current_counter=>$ctr,'local');
+  AssignValue('scopes_for_counter:'.$ctr => [$ctr.':'.ToString($v)],'local');
+  $STATE->activateScope($ctr.':'.ToString($v));
+  (refnum=>$v, id=>$id); }
+
+sub deactivateCounterScope {
+  my($ctr)=@_;
+#  print STDERR "Unusing scopes for $ctr\n";
+ if(my $scopes = LookupValue('scopes_for_counter:'.$ctr)){
+    map($STATE->deactivateScope($_), @$scopes); }
+  foreach my $inner_ctr (@{LookupValue('nested_counters_'.$ctr) || []}){
+    deactivateCounterScope($inner_ctr); }}
+
+# For UN-numbered units
+sub RefStepID {
+  my($ctr)=@_;
+  my $unctr = "UN$ctr";
+  my $v = StepCounter($unctr);
+  DefMacroI(T_CS("\\\@$ctr\@ID"),undef,
+	    Tokens(T_OTHER('x'),Explode(LookupValue('\c@'.$unctr)->valueOf)),
+	    scope=>'global');
+  my $id = Expand(T_CS("\\the$ctr\@ID"));
+  DefMacroI(T_CS('\@currentID'),undef,$id);
+  (id=>$id); }
+
+sub ResetCounter {
+  my($ctr)=@_;
+  AssignValue('\c@'.$ctr => Number(0),'global'); 
+  # and reset any within counters!
+  if(my $nested = LookupValue("\\cl\@$ctr")){
+    foreach my $c ($nested->unlist){
+      ResetCounter($c->toString); }}
+  return;}
+
+#**********************************************************************
+# This function computes an xml:id for a node, if it hasn't already got one.
+# It is suitable for use in Tag afterOpen as
+#  Tag('ltx:para',afterOpen=>sub { GenerateID(@_,'p'); });
+# It generates an id of the form <parentid>.<prefix><number>
+sub GenerateID {
+  my($document,$node,$whatsit,$prefix)=@_;
+  if(!$node->hasAttribute('xml:id')){
+    my $parent =  $document->findnode('ancestor::*[@xml:id][1]',$node)
+      || $document->getDocument->documentElement;
+    my $ctrkey = '_ID_counter_'.$prefix;
+    my $ctr = ($parent && $parent->getAttribute($ctrkey)) || 0;
+## Old versions don't like this!!!
+##    my $parent_id = $parent && $parent->getAttribute('xml:id');
+    my $parent_id = $parent && $parent->getAttributeNS("http://www.w3.org/XML/1998/namespace",'id');
+
+    my $id = ($parent_id ? $parent_id."." : '').$prefix. (++$ctr);
+    $parent->setAttribute($ctrkey=>$ctr) if $parent;
+    $document->setAttribute($node,'xml:id'=>$id);
+}}
+
 #======================================================================
 # Readers for reading various data types
 #======================================================================
-
-sub StartSemiverbatim() {
-  $STATE->pushFrame;
-  map($STATE->assignCatcode($_=>CC_OTHER,'local'),'^','_','@','~','&','$','#','%');}  # should '%' too ?
-sub EndSemiverbatim() {  $STATE->popFrame; }
 
 sub Expand            { $STATE->getStomach->getGullet->expandTokens(@_); }
 
 sub Invocation        {
   my($token,@args)=@_;
-  Tokens(LookupDefinition((ref $token ? $token : T_CS($token)))
-	 ->invocation(@args)); }
+  if(my $defn = LookupDefinition((ref $token ? $token : T_CS($token)))){
+    Tokens($defn->invocation(@args)); }
+  else {
+    Fatal(":undefined:".Stringify($token)." Cannot invoke ".Stringify($token)."; it is undefined");
+    Tokens(); }}
 
 #======================================================================
 # Non-exported support for defining forms.
@@ -176,15 +407,15 @@ sub Invocation        {
 sub CheckOptions {
   my($operation,$allowed,%options)=@_;
   my @badops = grep(!$$allowed{$_}, keys %options);
-  Error($operation." does not accept options:".join(', ',@badops)) if @badops;
+  Error(":misdefined:$operation $operation does not accept options:".join(', ',@badops)) if @badops;
 }
 
 sub requireMath() {
-  Fatal("Current operation can only appear in math mode") unless LookupValue('IN_MATH');
+  Error(":unexpected:<unknown> Current operation can only appear in math mode") unless LookupValue('IN_MATH');
   return; }
 
 sub forbidMath() {
-  Fatal("Current operation can not appear in math mode") if LookupValue('IN_MATH');
+  Error(":unexpected:<unknown> Current operation can not appear in math mode") if LookupValue('IN_MATH');
   return; }
 
 
@@ -203,24 +434,29 @@ sub forbidMath() {
 our $expandable_options = {isConditional=>1, scope=>1};
 sub DefExpandable {
   my($proto,$expansion,%options)=@_;
-  CheckOptions("DefExpandable ($proto)",$expandable_options,%options);
-  my ($cs,$paramlist)=parsePrototype($proto);
-  $expansion = Tokens() unless defined $expansion;
+  Warn(":misdefined:DefExpandable DefExpandable ($proto) is deprecated; use DefMacro");
+  DefMacro($proto,$expansion,%options); }
+
+# Define a Macro: Essentially an alias for DefExpandable
+# For convenience, the $expansion can be a string which will be tokenized.
+our $macro_options = {isConditional=>1, scope=>1};
+sub DefMacro {
+  my($proto,$expansion,%options)=@_;
+  CheckOptions("DefMacro ($proto)",$macro_options,%options);
+  DefMacroI(parsePrototype($proto),$expansion,%options); }
+
+sub DefMacroI {
+  my($cs,$paramlist,$expansion,%options)=@_;
+  if(!defined $expansion){ $expansion = Tokens(); }
+  elsif(!ref $expansion) { $expansion = TokenizeInternal($expansion); }
+  $cs = coerceCS($cs);
   $STATE->installDefinition(LaTeXML::Expandable->new($cs,$paramlist,$expansion,%options),
 			    $options{scope});
   return; }
 
-# Define a Macro: Essentially an alias for DefExpandable
-# For convenience, the $expansion can be a string which will be tokenized.
-our $macro_options = {scope=>1};
-sub DefMacro {
-  my($proto,$expansion,%options)=@_;
-  CheckOptions("DefMacro ($proto)",$macro_options,%options);
-  my ($cs,$paramlist)=parsePrototype($proto);
-  $expansion = Tokens() unless defined $expansion;
-  $expansion = TokenizeInternal($expansion) unless ref $expansion;
-  $STATE->installDefinition(LaTeXML::Expandable->new($cs,$paramlist,$expansion,%options),
-			    $options{scope});
+sub RawTeX {
+  my($text)=@_;
+  Digest(TokenizeInternal($text));
   return; }
 
 #======================================================================
@@ -232,12 +468,16 @@ sub DefMacro {
 #    isPrefix  : 1 for things like \global, \long, etc.
 #    registerType : for parameters (but needs to be worked into DefParameter, below).
 
-our $primitive_options = {isPrefix=>1,scope=>1, requireMath=>1, forbidMath=>1};
+our $primitive_options = {isPrefix=>1,scope=>1, requireMath=>1, forbidMath=>1,beforeDigest=>1};
 sub DefPrimitive {
   my($proto,$replacement,%options)=@_;
   CheckOptions("DefPrimitive ($proto)",$primitive_options,%options);
-  my ($cs,$paramlist)=parsePrototype($proto);
+  DefPrimitiveI(parsePrototype($proto),$replacement,%options); }
+
+sub DefPrimitiveI {
+  my($cs,$paramlist,$replacement,%options)=@_;
   $replacement = sub { (); } unless defined $replacement;
+  $cs = coerceCS($cs);
   $STATE->installDefinition(LaTeXML::Primitive->new($cs,$paramlist,$replacement,
 						    beforeDigest=> flatten(($options{requireMath} ? (\&requireMath):()),
 									   ($options{forbidMath}  ? (\&forbidMath):()),
@@ -251,19 +491,26 @@ our %register_types = ('LaTeXML::Number'   =>'Number',
 		       'LaTeXML::Dimension'=>'Dimension',
 		       'LaTeXML::Glue'     =>'Glue',
 		       'LaTeXML::MuGlue'   =>'MuGlue',
-		       'LaTeXML::Tokens'   =>'any',
+		       'LaTeXML::Tokens'   =>'Tokens',
 		       );
 sub DefRegister {
   my($proto,$value,%options)=@_;
   CheckOptions("DefRegsiter ($proto)",$register_options,%options);
+  DefRegisterI(parsePrototype($proto),$value,%options); }
+
+sub DefRegisterI {
+  my($cs,$paramlist,$value,%options)=@_;
+  $cs = coerceCS($cs);
   my $type = $register_types{ref $value};
-  my ($cs,$paramlist)=parsePrototype($proto);
   my $name = $cs->toString;
   my $getter = $options{getter} 
     || sub { LookupValue(join('',$name,map($_->toString,@_))) || $value; };
   my $setter = $options{setter} 
-    || sub { my($value,@args)=@_; 
-	     AssignValue(join('',$name,map($_->toString,@args)) => $value); };
+    || ($options{readonly}
+	? sub { my($value,@args)=@_; 
+		Error(":unexpected:$name Cannot assign to register $name"); return; }
+	: sub { my($value,@args)=@_; 
+		AssignValue(join('',$name,map($_->toString,@args)) => $value); });
   # Not really right to set the value!
   AssignValue($cs->toString =>$value) if defined $value;
   $STATE->installDefinition(LaTeXML::Register->new($cs,$paramlist, $type,$getter,$setter,
@@ -305,7 +552,11 @@ our $constructor_options = {mode=>1, requireMath=>1, forbidMath=>1, font=>1,
 sub DefConstructor {
   my($proto,$replacement,%options)=@_;
   CheckOptions("DefConstructor ($proto)",$constructor_options,%options);
-  my ($cs,$paramlist)=parsePrototype($proto);
+  DefConstructorI(parsePrototype($proto),$replacement,%options); }
+
+sub DefConstructorI {
+  my($cs,$paramlist,$replacement,%options)=@_;
+  $cs = coerceCS($cs);
   my $mode = $options{mode};
   my $bounded = $options{bounded};
   $STATE->installDefinition(LaTeXML::Constructor
@@ -346,22 +597,31 @@ sub DefConstructor {
 # When to make a dual ?
 # If the $presentation seems to be TeX (ie. it involves #1... but not ONLY!)
 our $math_options = {name=>1, meaning=>1, omcd=>1, reversion=>1, alias=>1,
-		     role=>1, operator_role=>1, reorder=>1,
+		     role=>1, operator_role=>1, reorder=>1, dual=>1,
 		     style=>1, font=>1,
 		     scriptpos=>1,operator_scriptpos=>1,
 		     beforeDigest=>1, afterDigest=>1, scope=>1, nogroup=>1};
 our $XMID=0;
 sub next_id {
-  "LXID".$XMID++; }
+##  "LXID".$XMID++; }
+  my $docid = LookupValue('DOCUMENTID');
+  ($docid ? "$docid.XM" : 'XM').++$XMID; }
 
 sub dualize_arglist {
   my(@args)=@_;
   my(@cargs,@pargs);
   foreach my $arg (@args){
     if(defined $arg){
-      my $id = next_id();
-      push(@cargs, Invocation(T_CS('\@XMArg'),T_OTHER($id),$arg));
-      push(@pargs, Invocation(T_CS('\@XMRef'),T_OTHER($id))); }
+#      my $id = next_id();
+#      push(@cargs, Invocation(T_CS('\@XMArg'),T_OTHER($id),$arg));
+#      push(@pargs, Invocation(T_CS('\@XMRef'),T_OTHER($id))); }
+
+      StepCounter('@XMARG');
+      DefMacroI(T_CS('\@@XMARG@ID'),undef, Tokens(Explode(LookupValue('\c@@XMARG')->valueOf)),
+		scope=>'global');
+      my $id = Expand(T_CS('\the@XMARG@ID'));
+      push(@cargs, Invocation(T_CS('\@XMArg'),$id,$arg));
+      push(@pargs, Invocation(T_CS('\@XMRef'),$id)); }
     else {
       push(@cargs,undef);
       push(@pargs,undef); }}
@@ -372,8 +632,12 @@ sub dualize_arglist {
 sub DefMath {
   my($proto,$presentation,%options)=@_;
   CheckOptions("DefMath ($proto)",$math_options,%options);
-  my ($cs,$paramlist)=parsePrototype($proto);  
-  my $nargs = scalar($paramlist->getParameters);
+  DefMathI(parsePrototype($proto),$presentation,%options); }
+
+sub DefMathI {
+  my($cs,$paramlist,$presentation,%options)=@_;
+  $cs = coerceCS($cs);
+  my $nargs = ($paramlist ? scalar($paramlist->getParameters): 0);
   my $csname = $cs->getString;
   my $meaning = $options{meaning};
   my $name = $csname;
@@ -389,6 +653,13 @@ sub DefMath {
     if ($nargs > 0) && !defined $options{operator_role};
   $options{reversion} = Tokenize($options{reversion})
     if $options{reversion} && !ref $options{reversion};
+  # Store some data for introspection
+  AssignValue(join("##","math_definition",$csname,$nargs,
+		   $options{role}||$options{operator_role}||'',$name||'',
+		   (defined $options{meaning} ? $options{meaning} :''),
+		   $STATE->getStomach->getGullet->getMouth->getSource,
+		   (ref $presentation ? '' : $presentation))=>1, global=>1);
+
   my %common =(alias=>$options{alias}||$cs->getString,
 	       (defined $options{reversion}
 		? (reversion=>$options{reversion}) : ()),
@@ -438,6 +709,8 @@ sub DefMath {
       $options{scope});
     # Make the presentation macro.
     $presentation = TokenizeInternal($presentation) unless ref $presentation;
+    $presentation = Invocation(T_CS('\@ASSERT@MEANING'), T_OTHER($meaning), $presentation)
+      if $meaning;
     $STATE->installDefinition(LaTeXML::Expandable->new($pres_cs, $paramlist,
 						       $presentation),
 			      $options{scope});
@@ -456,8 +729,13 @@ sub DefMath {
     $common{properties}{font} = sub { LookupValue('font')->specialize($presentation); };
     $STATE->installDefinition(LaTeXML::Constructor->new($cs,$paramlist,
          ($nargs == 0 
-	  ? "<ltx:XMTok role='#role' scriptpos='#scriptpos'"
-	  .           " font='#font' $attr$end_tok"
+	  # If trivial presentation, allow it in Text
+	  ? ($presentation !~ /(\(|\)|\\)/
+	     ? "?#isMath(<ltx:XMTok role='#role' scriptpos='#scriptpos'"
+	     .           " font='#font' $attr$end_tok)"
+	     .         "($presentation)"
+	     : "<ltx:XMTok role='#role' scriptpos='#scriptpos'"
+	     .           " font='#font' $attr$end_tok")
 	  : "<ltx:XMApp role='#role' scriptpos='#scriptpos'>"
 	  .   "<ltx:XMTok $attr font='#font' role='#operator_role'"
 	  .             " scriptpos='#operator_scriptpos' $end_tok"
@@ -477,10 +755,19 @@ our $environment_options = {mode=>1, requireMath=>1, forbidMath=>1,
 sub DefEnvironment {
   my($proto,$replacement,%options)=@_;
   CheckOptions("DefEnvironment ($proto)",$environment_options,%options);
-  $proto =~ s/^\{([^\}]+)\}\s*//; # Pull off the environment name as {name}
-  my $name = $1;
-  my $paramlist=parseParameters($proto,"Environment $name");
+##  $proto =~ s/^\{([^\}]+)\}\s*//; # Pull off the environment name as {name}
+##  my $paramlist=parseParameters($proto,"Environment $name");
+##  my $name = $1;
+  my($name,$paramspec)=Text::Balanced::extract_bracketed($proto,'{}');
+  $name =~ s/[\{\}]//g;
+  $paramspec =~ s/^\s*//;
+  my $paramlist=parseParameters($paramspec,"Environment $name");
+  DefEnvironmentI($name,$paramlist,$replacement,%options); }
+
+sub DefEnvironmentI {
+  my($name,$paramlist,$replacement,%options)=@_;
   my $mode = $options{mode};
+  $name = $name->toString if ref $name;
   # This is for the common case where the environment is opened by \begin{env}
   $STATE->installDefinition(LaTeXML::Constructor
 			     ->new(T_CS("\\begin{$name}"), $paramlist,$replacement,
@@ -493,22 +780,24 @@ sub DefEnvironment {
 							 $options{beforeDigest}),
 				   afterDigest =>flatten($options{afterDigestBegin}),
 				   beforeConstruct=> flatten(sub{$STATE->pushFrame;},$options{beforeConstruct}),
+				   # Curiously, it's the \begin whose afterConstruct gets called.
+				   afterConstruct => flatten($options{afterConstruct},sub{$STATE->popFrame;}),
 				   nargs=>$options{nargs},
 				   captureBody=>1, 
-				   properties=>$options{properties}||{}),
-			     $options{scope});
+				   properties=>$options{properties}||{},
+				  ), $options{scope});
   $STATE->installDefinition(LaTeXML::Constructor
 			     ->new(T_CS("\\end{$name}"),"","",
 				   beforeDigest =>flatten($options{beforeDigestEnd}),
 				   afterDigest=>flatten($options{afterDigest},
 							sub { my $env = LookupValue('current_environment');
-							      Error("Cannot close environment $name; current is $env")
-								unless $name eq $env; 
+							      Error(":unexpected:\\end{$name} Cannot close environment $name; current are "
+								    .join(', ',$STATE->lookupStackedValues('current_environment')))
+								unless $env && $name eq $env; 
 							    return; },
 							($mode ? (sub { $_[0]->endMode($mode);})
 							 :(sub{$_[0]->egroup;}))),
-				   afterConstruct => flatten($options{afterConstruct},sub{$STATE->popFrame;})),
-			     $options{scope});
+				  ),$options{scope});
   # For the uncommon case opened by \csname env\endcsname
   $STATE->installDefinition(LaTeXML::Constructor
 			     ->new(T_CS("\\$name"), $paramlist,$replacement,
@@ -519,8 +808,10 @@ sub DefEnvironment {
 							 $options{beforeDigest}),
 				   afterDigest =>flatten($options{afterDigestBegin}),
 				   beforeConstruct=> flatten(sub{$STATE->pushFrame;},$options{beforeConstruct}),
+				   # Curiously, it's the \begin whose afterConstruct gets called.
+				   afterConstruct => flatten($options{afterConstruct},sub{$STATE->popFrame;}),
 				   nargs=>$options{nargs},
-				   captureBody=>1,
+				   captureBody=>T_CS("\\end$name"), # Required to capture!!
 				   properties=>$options{properties}||{}),
 			     $options{scope});
   $STATE->installDefinition(LaTeXML::Constructor
@@ -528,11 +819,13 @@ sub DefEnvironment {
 				   beforeDigest =>flatten($options{beforeDigestEnd}),
 				   afterDigest=>flatten($options{afterDigest},
 							($mode ? (sub { $_[0]->endMode($mode);}):())),
-				   afterConstruct => flatten($options{afterConstruct},sub{$STATE->popFrame;})),
-			     $options{scope});
+				  ),$options{scope});
   return; }
 
 #======================================================================
+# Declaring and Adjusting the Document Model.
+#======================================================================
+
 # Specify the properties of a Node tag.
 our $tag_options = {autoOpen=>1, autoClose=>1, afterOpen=>1, afterClose=>1};
 
@@ -557,34 +850,219 @@ sub Tag {
 
 sub DocType {
   my($rootelement,$pubid,$sysid,%namespaces)=@_;
-  $STATE->getModel->setDocType($rootelement,$pubid,$sysid,%namespaces);
+  my $model = $STATE->getModel;
+  $model->setDocType($rootelement,$pubid,$sysid);
+  foreach my $prefix (keys %namespaces){
+    $model->registerDocumentNamespace($prefix=>$namespaces{$prefix}); }
   return; }
 
+# What verb here? Set, Choose,...
+sub RelaxNGSchema {
+  my($schema,%namespaces)=@_;
+  my $model = $STATE->getModel;
+  $model->setRelaxNGSchema($schema,);
+  foreach my $prefix (keys %namespaces){
+    $model->registerDocumentNamespace($prefix=>$namespaces{$prefix}); }
+  return; }
+  
 sub RegisterNamespace {
   my($prefix,$namespace)=@_;
   $STATE->getModel->registerNamespace($prefix,$namespace);
   return; }
 
-our $require_options = {options=>1};
+#======================================================================
+# Package, Class and File Loading
+#======================================================================
+
+# Find a file:
+# If the raw option is given, 
+#   it searches for the file.
+# If $ext is given or $file ends with a known extension
+# (eg. .sty for packages, .cls for classes, etc):
+#    the file is sought first as $file.$ext.ltxml then as $file.$ext
+# Otherwise, the file is sought in a more TeX-like fashion:
+#    the file is sought as $file.tex.ltxml, $file.tex, $file.ltxml or $file.
+# [ie. if raw=>1, we do _not_ loo for .ltxml forms]
+our $findfile_options = {raw=>1, type=>1};
+sub FindFile {
+  my ($file,%options)=@_;
+  CheckOptions("FindFile ($file)",$findfile_options,%options);
+  my $paths = LookupValue('SEARCHPATHS');
+  $file = ToString($file);
+  $file .= ".$options{type}" if $options{type};
+  if($options{raw}){
+    pathname_find("$file",paths=>$paths); }
+  elsif($options{type} || ($file =~ /\.(tex|pool|sty|cls|clo|cnf)$/)){ # explicit or known extensions
+    pathname_find("$file.ltxml",paths=>$paths,installation_subdir=>'Package')
+      || pathname_find("$file",paths=>$paths); }
+  else {
+    pathname_find("$file.tex.ltxml",paths=>$paths,installation_subdir=>'Package')
+      || pathname_find("$file.tex",paths=>$paths)
+	|| pathname_find("$file.ltxml",paths=>$paths,installation_subdir=>'Package')
+	  || pathname_find("$file",paths=>$paths); }}
+
+# Declare an option for the current package or class
+# If $option is undef, it is the default.
+# $code can be a sub (as a primitive), or a string to be expanded.
+# (effectively a macro)
+
+sub DeclareOption {
+  my($option,$code)=@_;
+  $option = ToString($option) if ref $option;
+  PushValue('@declaredoptions',$option) if $option;
+  my $cs = ($option ? '\ds@'.$option : '\default@ds');
+  # print STDERR "Declaring option: ".($option ? $option : '<default>')."\n";
+  if((!defined $code) || (ref $code eq 'CODE')){
+    DefPrimitiveI($cs,undef,$code); }
+  else {
+    DefMacroI($cs,undef,$code); }
+  return; }
+
+# Pass the sequence of @options to the package $name (if $ext is 'sty'),
+# or class $name (if $ext is 'cls').
+sub PassOptions {
+  my($name,$ext,@options)=@_;
+  PushValue('opt@'.$name.'.'.$ext, map(ToString($_),@options));
+  # print STDERR "Passing to $name.$ext options: ".join(', ',@options)."\n";
+  return; }
+
+# Process the options passed to the currently loading package or class.
+# If inorder=>1, they are processed in the order given (like \ProcessOptions*),
+# otherwise, they are processed in the order declared.
+# Unless noundefine=>1 (like for \ExecuteOptions), all option definitions
+# undefined after execution.
+our $processoptions_options = {inorder=>1};
+sub ProcessOptions {
+  my(%options)=@_;
+  CheckOptions("ProcessOptions",$processoptions_options,%options);
+  my $name = ToString(Digest(T_CS('\@currname')));
+  my $ext  = ToString(Digest(T_CS('\@currext')));
+  my @declaredoptions = @{LookupValue('@declaredoptions')};
+  my @curroptions     = @{LookupValue('opt@'.$name.'.'.$ext)};
+#  print STDERR "\nProcessing options for $name.$ext: ".join(', ',@curroptions)."\n";
+
+  my $defaultcs = T_CS('\default@ds');
+  # Execute options in declared order (unless \ProcessOptions*)
+
+  if($options{inorder}){	# Execute options in order (eg. \ProcessOptions*)
+    foreach my $option (@curroptions){
+      DefMacroI('\CurrentOption',undef,$option);
+      my $cs = T_CS('\ds@'.$option);
+      if(LookupDefinition($cs)){
+#	print STDERR "\nUsing option $option to $name.$ext\n";
+	Digest($cs); }
+      elsif($defaultcs){
+#	print STDERR "\nUsing option $option to $name.$ext with default handler\n";
+	Digest($defaultcs); }}}
+  else {			# Execute options in declared order (eg. \ProcessOptions)
+    foreach my $option (@declaredoptions){
+      if(grep($option eq $_,@curroptions)){
+	@curroptions = grep($option ne $_, @curroptions); # Remove it, since it's been handled.
+#	 print STDERR "\nUsing option $option  to $name.$ext\n";
+	DefMacroI('\CurrentOption',undef,$option);
+	Digest(T_CS('\ds@'.$option)); }}
+    # Now handle any remaining options (eg. default options), in the given order.
+    foreach my $option (@curroptions){
+      DefMacroI('\CurrentOption',undef,$option);
+#      print STDERR "\nUsing option $option to $name.$ext with default handler\n";
+      Digest($defaultcs); }}
+  # Now, undefine the handlers?
+  foreach my $option (@declaredoptions){
+    Let(T_CS('\ds@'.$option),T_CS('\relax')); }
+  return; }
+
+sub ExecuteOptions {
+  my(@options)=@_;
+  my %unhandled=();
+  foreach my $option (@options){
+    my $cs = T_CS('\ds@'.$option);
+    if(LookupDefinition($cs)){
+      DefMacroI('\CurrentOption',undef,$option);
+      Digest($cs); }
+    else {
+      $unhandled{$option}=1; }}
+  Warn(":unexpected:<option> Unrecognized options passed to ExecuteOptions: ".join(', ',sort keys %unhandled))
+    if keys %unhandled; 
+  return; }
+
+sub resetOptions {
+  AssignValue('@declaredoptions',[]);
+  Let(T_CS('\default@ds'),
+      (ToString(Digest(T_CS('\@currext'))) eq 'cls'
+       ? T_CS('\OptionNotUsed') : T_CS('\@unknownoptionerror')));
+}
+
+sub AddToMacro {
+  my($cs,$tokens)=@_;
+  # Needs error checking!
+  my $defn = LookupDefinition($cs);
+  DefMacroI($cs,undef,Tokens($$defn{expansion}->unlist,$tokens->unlist)); }
+
+our $require_options = {options=>1, withoptions=>1, type=>1, raw=>1};
 sub RequirePackage {
   my($package,%options)=@_;
+  $package = ToString($package) if ref $package;
   CheckOptions("RequirePackage ($package)",$require_options,%options);
-  $STATE->getStomach->getGullet->input($package,['ltxml','sty'],%options); 
+  $options{type} = 'sty' unless $options{type};
+  my $type = $options{type};
+  # For \RequirePackageWithOptions, pass the options from the outer class/style to the inner one.
+  my $prevname = LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
+  my $prevext  = LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
+  if($options{withoptions} && $prevname){
+    PassOptions($package,$type,@{LookupValue('opt@'.$prevname.".".$prevext)}); }
+  DefMacroI('\@currname',undef,Tokens(Explode($package)));
+  DefMacroI('\@currext',undef,Tokens(Explode($type)));
+  # reset options
+  resetOptions();
+  PassOptions($package,$type,@{$options{options} || []});
+  if(my $file = FindFile($package, type=>$type, raw=>$options{raw})){
+    DefMacroI(T_CS("\\$package.$type-hook"),undef,$options{after} || '');
+    my $gullet = $STATE->getStomach->getGullet;
+##    $gullet->openMouth(Tokens(T_CS("\\$package.$type-hook")));
+    $gullet->input($file,undef,%options); 
+    Digest(T_CS("\\$package.$type-hook"));
+    DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
+    DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
+    resetOptions(); } # And reset options afterwards, too.
+  else {
+    $STATE->noteStatus(missing=>$package);
+    Error(":missing_file:$package Cannot find package $package"
+	  .($type eq 'sty' ? '' : "(w/type=$type)")
+	  ." in paths ".join(', ',@{$STATE->lookupValue('SEARCHPATHS')})); }
   return; }
 
-sub FindFile {
-  my ($file,$ext)=@_;
-  $file = ToString($file);
-  $ext = [$ext] unless ref $ext;
-  my $pkg = ($file =~ /\.ltxml$/) || ($ext && grep('ltxml',@$ext));
-  pathname_find($file,paths=>LookupValue('SEARCHPATHS'),
-		types=>$ext,
-		($pkg ? (installation_subdir=>'Package'):())); }
-
-sub RawTeX {
-  my($text)=@_;
-  Digest(TokenizeInternal($text));
+our $loadclass_options = {options=>1, withoptions=>1, after=>1};
+sub LoadClass {
+  my($class,%options)=@_;
+  $class = ToString($class) if ref $class;
+  CheckOptions("LoadClass ($class)",$loadclass_options,%options);
+  $options{type} = 'cls' unless $options{type};
+  my $type = $options{type};
+  my $prevname = LookupDefinition(T_CS('\@currname')) && ToString(Digest(T_CS('\@currname')));
+  my $prevext  = LookupDefinition(T_CS('\@currext')) && ToString(Digest(T_CS('\@currext')));
+  # For \LoadClassWithOptions, pass the options from the outer class to the inner one.
+  if($options{withoptions} && $prevname){
+    PassOptions($class,$type,@{LookupValue('opt@'.$prevname.".".$prevext)}); }
+  DefMacroI('\@currname',undef,Tokens(Explode($class)));
+  DefMacroI('\@currext',undef,Tokens(Explode($type)));
+  PassOptions($class,$type,@{$options{options} || []});
+  # What about "global options" ??????
+  resetOptions();
+  my $classfile = FindFile($class, type=>$type, raw=>$options{raw});
+  if(!$classfile || ($classfile =~ /\.cls$/)){
+    Warn(":missing_file:$class.cls.ltxml No LaTeXML implementation of class $class found, using article");
+    if(!($classfile = FindFile("article.cls"))){
+      Fatal(":missing_file:article.cls.ltxml Installation error: Cannot find article implementation!"); }}
+  DefMacroI(T_CS("\\$class.$type-hook"),undef,$options{after} || '');
+  my $gullet = $STATE->getStomach->getGullet;
+##  $gullet->openMouth(Tokens(T_CS("\\$class.$type-hook")));
+  $gullet->input($classfile,undef,%options);
+  Digest(T_CS("\\$class.$type-hook"));
+  DefMacroI('\@currname',undef,Tokens(Explode($prevname))) if $prevname;
+  DefMacroI('\@currext',undef,Tokens(Explode($prevext))) if $prevext;
+  resetOptions();  # And reset options afterwards, too.
   return; }
+
 
 #======================================================================
 # Defining Rewrite rules that act on the DOM
@@ -625,7 +1103,7 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Package> -- Support for package implementations and document customization.
+C<LaTeXML::Package> - Support for package implementations and document customization.
 
 =head1 SYNOPSIS
 
@@ -636,46 +1114,51 @@ installed C<LaTeXML/Package> directory for realistic examples.
 
   use LaTeXML::Package;
   use strict;
-
+  #
   # Load "anotherpackage"
   RequirePackage('anotherpackage');
-
+  #
   # A simple macro, just like in TeX
   DefMacro('\thesection', '\thechapter.\roman{section}');
-
+  #
   # A constructor defines how a control sequence generates XML:
   DefConstructor('\thanks{}', "<ltx:thanks>#1</ltx:thanks>");
-
+  #
   # And a simple environment ...
   DefEnvironment('{abstract}','<abstract>#body</abstract>');
-
+  #
   # A math  symbol \Real to stand for the Reals:
   DefMath('\Real', "\x{211D}", role=>'ID');
-
-   # Or a semantic floor:
+  #
+  # Or a semantic floor:
   DefMath('\floor{}','\left\lfloor#1\right\rfloor');
-
+  #
   # More esoteric ...
-
-  # Use a special DocType, if not LaTeXML.dtd
-  DocType("rootelement","-//Your Site//Your Document Type",'your.dtd',
-          prefix=>"http://whatever/");
-
+  # Use a RelaxNG schema
+  RelaxNGSchema("MySchema");
+  # Or use a special DocType if you have to:
+  # DocType("rootelement","-//Your Site//Your DocType",'your.dtd',
+  #          prefix=>"http://whatever/");
+  #
   # Allow sometag elements to be automatically closed if needed
-  Tag('pre:sometag', autoClose=>1);
-
-  # Don't forget this; it tells perl the package loaded successfully.
+  Tag('prefix:sometag', autoClose=>1);
+  #
+  # Don't forget this, so perl knows the package loaded.
   1;
 
 
 =head1 DESCRIPTION
 
-To provide a LaTeXML=specific version of a LaTeX package C<somepackage.sty>, 
-(so that C<\usepackage{somepackage}> works), you create the file C<somepackage.ltxml>
+To provide a LaTeXML-specific version of a LaTeX package C<mypackage.sty>
+or class C<myclass.cls> (so that eg. C<\usepackage{mypackage}> works),
+you create the file C<mypackage.sty.ltxml> or C<myclass.cls.ltxml>
 and save it in the searchpath (current directory, or one of the directories
 given to the --path option, or possibly added to the variable SEARCHPATHS).
-Likewise, to provide document-specific customization for, say, C<mydoc.tex>, 
+Similarly, to provide document-specific customization for, say, C<mydoc.tex>,
 you would create the file C<mydoc.latexml> (typically in the same directory).
+However,  in the first cases, C<mypackage.sty.ltxml> are loaded I<instead> of
+C<mypackage.sty>, while a file like C<mydoc.latexml> is loaded in I<addition> to
+C<mydoc.tex>.
 In either case, you'll C<use LaTeXML::Package;> to import the various declarations
 and defining forms that allow you to specify what should be done with various
 control sequences, whether there is special treatment of certain document elements,
@@ -692,7 +1175,7 @@ anonymous function S<sub { ... }>.  To document these cases, and the
 arguments that are passed in each case, we'll use a notation like
 S<CODE($token,..)>.
 
-=head2 Control Sequence Definitions
+=head2 Control Sequences
 
 Many of the following forms define the behaviour of control sequences.
 In TeX you'll typically only define macros. In LaTeXML, we're
@@ -718,7 +1201,7 @@ familiar TeX or LaTeX control sequences are:
 
 The general syntax for parameter for a control sequence is something like
 
-  OpenDelimiter? Modifier? Type (: value (| value)* )? CloseDelimiter?
+  OpenDelim? Modifier? Type (: value (| value)* )? CloseDelim?
 
 The enclosing delimiters, if any, are either {} or [], affect the way the
 argument is delimited.  With {}, a regular TeX argument (token or sequence
@@ -784,12 +1267,10 @@ Skips any space tokens, but contributes nothing to the argument list.
 
 =back
 
-=over
-
 =head3 Control of Scoping
 
-Most defining commands accept an option  C<< scope=>$scope >> which affects how the
-definition is stored: C<$scope> can be c<'global'> for global definitions,
+Most defining commands accept an option to control how the definition is stored,
+C<< scope=>$scope >>, where C<$scope> can be c<'global'> for global definitions,
 C<'local'>, to be stored in the current stack frame, or a string naming a I<scope>.
 A scope saves a set of definitions and values that can be activated at a later time.
 
@@ -798,31 +1279,50 @@ upon changes of counter and label.  For example, definitions that have
 C<< scope=>'section:1.1' >>  will be activated when the section number is "1.1",
 and will be deactivated when the section ends.
 
-=head3 The defining forms
+=head3 Macros
 
-=item C<< DefExpandable($prototype,CODE($gullet,@args),%options); >>
+=over
 
-Defines an expandable control sequence. The CODE should return 
-a list of L<LaTeXML::Token>'s that replace the macro and its arguments.
-The only option, other than C<scope>, is C<isConditional> which should be true,
-for conditional control sequences (TeX uses these to keep track of conditional
-nesting when skipping to \else or \fi).
-
-=item C<< DefMacro($prototype,$string | $tokens | CODE($gullet,@args),%options); >>
+=item C<< DefMacro($prototype,$string | $tokens | $code,%options); >>
 
 Defines the macro expansion for C<$prototype>.  If a C<$string> is supplied, it will be
 tokenized at definition time, and any macro arguments will be substituted for parameter
 indicators (eg #1) at expansion time; the result is used as the expansion of
-the control sequence.  The only option is C<scope>.
+the control sequence. 
+The only option, other than C<scope>, is C<isConditional> which should be true,
+for conditional control sequences (TeX uses these to keep track of conditional
+nesting when skipping to \else or \fi).
+
+If defined by C<$code>, the form is C<CODE($gullet,@args)> and it
+must return a list of L<LaTeXML::Token>'s.
+
+=item C<< DefMacroI($cs,$paramlist,$string | $tokens | $code,%options); >>
+
+Internal form of C<DefMacro> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
+Also, slightly more efficient for macros with no arguments (use C<undef> for
+C<$paramlist>).
+
+=back
+
+=head3 Primitives
+
+=over
 
 =item C<< DefPrimitive($prototype,CODE($stomach,@args),%options); >>
 
 Define a primitive control sequence.
-The CODE should return a list of digested items,
-but usually should return nothing (eg. end with return; ).
+These are usually done for side effect and
+so CODE should end with C<return;>, but can also
+return a list of digested items.
 
-The only option is for the special case: C<isPrefix=>1> is used for assignment
+The only option is for the special case: C<< isPrefix=>1 >> is used for assignment
 prefixes (like \global).
+
+=item C<< DefPrimitiveI($cs,$paramlist,CODE($stomach,@args),%options); >>
+
+Internal form of C<DefPrimitive> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
 
 =item C<< DefRegister($prototype,$value,%options); >>
 
@@ -849,7 +1349,18 @@ storing the value.
 
 =back
 
-=item C<< DefConstructor($prototype,$xmlpattern | CODE($document,@args,$properties),%options); >>
+=item C<< DefRegisterI($cs,$paramlist,$value,%options); >>
+
+Internal form of C<DefRegister> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
+
+=back
+
+=head3 Constructors
+
+=over
+
+=item C<< DefConstructor($prototype,$xmlpattern | $code,%options); >>
 
 The Constructor is where LaTeXML really starts getting interesting;
 invoking the control sequence will generate an arbitrary XML
@@ -860,6 +1371,8 @@ to the replacement C<$xmlpattern>, or by executing C<CODE>.
 
 The C<$xmlpattern> is simply a bit of XML as a string with certain substitutions to be made.
 The substitutions are of the following forms:
+
+If code is supplied,  the form is C<CODE($document,@args,%properties)>
 
 =over
 
@@ -879,7 +1392,7 @@ to the control sequence; what it returns will be inserted into the document.
 
 Patterns can be conditionallized using this form.  The C<COND> is any
 of the above expressions, considered true if the result is non-empty.
-Thus C<<?#1(<foo/>)>> would add the empty element C<foo> if the first argument
+Thus C<< ?#1(<foo/>) >> would add the empty element C<foo> if the first argument
 were given.
 
 =item C<^>
@@ -889,10 +1402,10 @@ to a parent node that is allowed to contain it, according to the Document Type.
 
 =back
 
-The Whatsit property C<font> is defined by default.  The additional properties
+The Whatsit property C<font> is defined by default.  Additional properties
 C<body> and C<trailer> are defined when C<captureBody> is true, or for environments.
-Other properties can be added to Whatsits by using C<< $whatsit->setProperty(key=>$value); >> 
-within C<afterDigest> or using the C<properties> option.
+By using C<< $whatsit->setProperty(key=>$value); >> within C<afterDigest>,
+or by using the C<properties> option, other properties can be added.
 
 DefConstructor options are
 
@@ -915,8 +1428,8 @@ or cannot appear, in math mode.
 
 =item  font=>{fontspec...}
 
-Specifies the font properties to be set by this invocation.
-See L<"MergeFont">
+Specifies the font to be set by this invocation.
+See L</MergeFont>
 If the font change is to only apply to this construct,
 you would also use C<<bounded=>1>>.
 
@@ -960,10 +1473,11 @@ Supplies CODE to execute before constructing the XML
 
 Supplies CODE to execute after constructing the XML.
 
-=item  captureBody=>boolean
+=item  captureBody=>boolean or Token
 
 if true, arbitrary following material will be accumulated into
-a `body' until the current grouping level is reverted.
+a `body' until the current grouping level is reverted,
+or till the C<Token> is encountered if the option is a C<Token>.
 This body is available as the C<body> property of the Whatsit.
 This is used by environments and math.
 
@@ -979,9 +1493,14 @@ from the C<$prototype> (eg. when more args are explictly read by Daemons).
 
 =item  scope=>$scope
 
-See L<scope>.
+See L</scope>.
 
 =back
+
+=item C<< DefConstructorI($cs,$paramlist,$xmlpattern | $code,%options); >>
+
+Internal form of C<DefConstructor> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
 
 =item C<< DefMath($prototype,$tex,%options); >>
 
@@ -992,8 +1511,11 @@ parsing of mathematical content.
 In particular, it generates an XMDual using the replacement $tex for the presentation.
 The content information is drawn from the name and options
 
-It shares options with C<DefConstructor>: C<reversion>, C<alias>, 
-C<beforeDigest>, C<afterDigest>, C<beforeConstruct>, C<afterConstruct> and C<scope>.
+These C<DefConstructor> options also apply:
+
+  reversion, alias, beforeDigest, afterDigest,
+  beforeConstruct, afterConstruct and scope.
+
 Additionally, it accepts
 
 =over
@@ -1019,17 +1541,17 @@ This direly needs documentation!
 =item  font=>{fontspec}
 
 Specifies the font to be used for when creating this object.
-See L<MergeFont>.
-
+See L</MergeFont>.
 
 =item scriptpos=>boolean
 
-Controls whether any sub and super-scripts will be stacked over/under this
+Controls whether any sub and super-scripts will be stacked over or under this
 object, or whether they will appear in the usual position.
 
 WRONG: Redocument this!
 
 =item operator_role=>grammatical_role
+
 =item operator_scriptpos=>boolean
 
 These two are similar to C<role> and C<scriptpos>, but are used in
@@ -1042,6 +1564,11 @@ Normally, these commands are digested with an implicit grouping around them,
 so that changes to fonts, etc, are local.  Providing C<<noggroup=>1>> inhibits this.
 
 =back
+
+=item C<< DefMathI($cs,$paramlist,$tex,%options); >>
+
+Internal form of C<DefMath> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
 
 =item C<< DefEnvironment($prototype,$replacement,%options); >>
 
@@ -1057,20 +1584,156 @@ the group is closed.  The body and C<\end{env}> whatsit are added to the C<\begi
 as body and trailer, respectively.
 
 
-It shares options with C<DefConstructor>: C<mode>, C<requireMath>, C<forbidMath>,
-C<properties>, C<nargs>, C<font>, C<beforeDigest>, C<afterDigest>, C<beforeConstruct>, 
-C<afterConstruct> and C<scope>.
-Additionally, it accepts C<afterDigestBegin> which is effectively a C<afterDigest>
+It shares options with C<DefConstructor>:
+
+ mode, requireMath, forbidMath, properties, nargs,
+ font, beforeDigest, afterDigest, beforeConstruct, 
+ afterConstruct and scope.
+
+Additionally, C<afterDigestBegin> is effectively an C<afterDigest>
 for the C<\begin{env}> control sequence.
 
 
-=item C<< Let($token1,$token2); >>
+=item C<< DefEnvironmentI($name,$paramlist,$replacement,%options); >>
 
-Gives C<$token1> the same `meaning' (definition) as C<$token2>; like TeX's \let.
+Internal form of C<DefEnvironment> where the control sequence and parameter list
+have already been parsed; useful for definitions from within code.
 
 =back
 
-=head2 Document Declarations
+=head2 Class and Packages
+
+=over
+
+=item C<< RequirePackage($package,%options); >>
+
+Finds and loads a package implementation (usually C<*.sty.ltxml>, unless C<raw> is specified)
+for the required C<$package>.
+The options are:
+
+=over
+
+=item C<< type=>type >> specifies the file type (default C<sty>.
+
+=item C<< options=>[...] >> specifies a list of package options.
+
+=item C<< raw=>1 >> specifies that it is allowable to try to read a raw TeX style file.
+
+=back
+
+=item C<< LoadClass($class,%options); >>
+
+Finds and loads a class definition (usually C<*.cls.ltxml>).
+The only option is
+
+=over
+
+=item C<< options=>[...] >> specifies a list of class options.
+
+=back
+
+=item C<< FindFile($name,%options); >>
+
+Find an appropriate file with the given C<$name> in the current directories
+in C<SEARCHPATHS>.
+If a file ending with C<.ltxml> is found, it will be preferred.
+The options are:
+
+=over
+
+=item C<< type=>type >> specifies the file type (default C<sty>.
+
+=item C<< raw=>1 >> specifies that it is allowable to try to read a raw TeX style file.
+
+=back
+
+=item C<< DeclareOption($option,$code); >>
+
+Declares an option for the current package or class.
+The C<$code> can be a string or Tokens (which will be macro expanded),
+or can be a code reference which is treated as a primitive.
+
+If a package or class wants to accomodate options, it should start
+with one or more C<DeclareOptions>, followed by C<ProcessOptions()>.
+
+=item C<< PassOptions($name,$ext,@options); >>
+
+Causes the given C<@options> (strings) to be passed to the
+package (if C<$ext> is C<sty>) or class (if C<$ext> is C<cls>)
+named by C<$name>.
+
+=item C<< ProcessOptions(); >>
+
+Processes the options that have been passed to the current package
+or class in a fashion similar to LaTeX.  If the keyword
+C<< inorder=>1 >> is given, the options are processed in the
+order they were used, like C<ProcessOptions*>.
+
+=item C<< ExecuteOptions(@options); >>
+
+Process the options given explicitly in C<@options>.
+
+=back
+
+=head2 Counters and IDs
+
+=over 4
+
+=item C<< NewCounter($ctr,$within,%options); >>
+
+Defines a new counter, like LaTeX's \newcounter, but extended.
+It defines a counter that can be used to generate reference numbers,
+and defines \the$ctr, etc. It also defines an "uncounter" which
+can be used to generate ID's (xml:id) for unnumbered objects.
+C<$ctr> is the name of the counter.  If defined, C<$within> is the name
+of another counter which, when incremented, will cause this counter
+to be reset.
+The options are
+
+   idprefix  Specifies a prefix to be used when using this counter
+             to generate ID's.
+   nested    Not sure that this is even sane.
+
+=item C<< $num = CounterValue($ctr); >>
+
+Fetches the value associated with the counter C<$ctr>.
+
+=item C<< $tokens = StepCounter($ctr); >>
+
+Like C<\stepcounter>, steps the counter and returns the expansion of
+C<\the$ctr>.  Usually you should use C<RefStepCounter($ctr)> instead.
+
+=item C<< $keys = RefStepCounter($ctr); >>
+
+Like C<\refstepcounter>, it steps the counter and returns the keys
+C<refnum=>$refnum, id=>$id>, making it suitable for use in
+a C<properties> option to constructors.  The C<id> is generated
+in parallel with the reference number to assist debugging.
+
+=item C<< $keys = RefStepID($ctr); >>
+
+Analogous to C<RefStepCounter>, but only steps the "uncounter",
+and returns only the id;  This is useful for unnumbered cases
+of objects that normally get both a refnum and id.
+
+=item C<< ResetCounter($ctr); >>
+
+Resets the counter C<$ctr> to zero.
+
+=item C<< GenerateID($document,$node,$whatsit,$prefix); >>
+
+Generates an ID for nodes during the construction phase, useful
+for cases where the counter based scheme is inappropriate.
+The calling pattern makes it appropriate for use in Tag, as in
+   Tag('ltx:para',sub { GenerateID(@_,'p'); })
+
+If C<$node> doesn't already have an xml:id set, it computes an
+appropriate id by concatenating the xml:id of the closest
+ancestor with an id (if any), the prefix and a unique counter.
+
+=back
+
+=head2 Document Model
 
 Constructors define how TeX markup will generate XML fragments, but the
 Document Model is used to control exactly how those fragments are assembled.
@@ -1104,6 +1767,9 @@ This property can help match the more  SGML-like LaTeX to XML.
 Provides CODE to be run whenever a node with this $tag
 is opened.  It is called with the document being constructed,
 and the initiating digested object as arguments.
+It is called after the node has been created, and after
+any initial attributes due to the constructor (passed to openElement)
+are added.
 
 =item afterClose=>CODE($document,$box)
 
@@ -1113,6 +1779,19 @@ and the initiating digested object as arguments.
 
 =back
 
+=item C<< RelaxNGSchema($schemaname); >>
+
+Specifies the schema to use for determining document model.
+You can leave off the extension; it will look for C<.rng>,
+and maybe eventually, C<.rnc> once that is implemented.
+
+=item C<< RegisterNamespace($prefix,$URL); >>
+
+Declares the C<$prefix> to be associated with the given C<$URL>.
+These prefixes may be used in ltxml files, particularly for
+constructors, xpath expressions, etc.  They are not necessarily
+the same as the prefixes that will be used in the generated document
+(See DocType).
 
 =item C<< DocType($rootelement,$publicid,$systemid,%namespaces); >>
 
@@ -1126,17 +1805,9 @@ The prefixes defined for the DTD may be different from the prefixes used in
 implementation CODE (eg. in ltxml files; see RegisterNamespace).
 The generated document will use the namespaces and prefixes defined for the DTD.
 
-=item C<< RegisterNamespace($prefix,$URL); >>
-
-Declares the C<$prefix> to be associated with the given C<$URL>.
-These prefixes may be used in ltxml files, particularly for
-constructors, xpath expressions, etc.  They are not necessarily
-the same as the prefixes that will be used in the generated document
-(See DocType).
-
 =back
 
-=head2 Ligatures
+=head2 Document Rewriting
 
 During document construction, as each node gets closed, the text content gets simplfied.
 We'll call it I<applying ligatures>, for lack of a better name.
@@ -1166,8 +1837,8 @@ symbols or numbers, depending on the font (non math italic).
 
 =back
 
-=head2 Document Rewriting
-
+After document construction, various rewriting and augmenting of the
+document can take place.
 
 =over
 
@@ -1227,14 +1898,23 @@ replace the selected nodes.
 
 =back
 
-=head2 Other useful operations
+=head2 Mid-Level support
 
 =over
 
-=item C<< RequirePackage($package); >>
+=item C<< $tokens = Expand($tokens); >>
 
-Finds an implementation (either TeX or LaTeXML) for the named C<$package>, and loads it
-as appropriate.
+Expands the given C<$tokens> according to current definitions.
+
+=item C<< $boxes = Digest($tokens); >>
+
+Processes and digestes the C<$tokens>.  Any arguments needed by
+control sequences in C<$tokens> must be contained within the C<$tokens> itself.
+
+=item C<< @tokens = Invocation($cs,@args); >>
+
+Constructs a sequence of tokens that would invoke the token C<$cs>
+on the arguments.
 
 =item C<< RawTeX('... tex code ...'); >>
 
@@ -1242,12 +1922,60 @@ RawTeX is a convenience function for including chunks of raw TeX (or LaTeX) code
 in a Package implementation.  It is useful for copying portions of the normal
 implementation that can be handled simply using macros and primitives.
 
+=item C<< Let($token1,$token2); >>
+
+Gives C<$token1> the same `meaning' (definition) as C<$token2>; like TeX's \let.
+
 =back
 
+=head2 Argument Readers
 
-=head2 Convenience Functions
+=over
 
-The following are exported as a convenience when writing definitions.
+=item C<< ReadParameters($gullet,$spec); >>
+
+Reads from C<$gullet> the tokens corresponding to C<$spec>
+(a Parameters object).
+
+=item C<< DefParameterType($type,CODE($gullet,@values),%options); >>
+
+Defines a new Parameter type, C<$type>, with CODE for its reader.
+
+Options are:
+
+=over
+
+=item reversion=>CODE($arg,@values);
+
+This CODE is responsible for converting a previously parsed argument back
+into a sequence of Token's.
+
+=item optional=>boolean
+
+whether it is an error if no matching input is found.
+
+=item novalue=>boolean
+
+whether the value returned should contribute to argument lists, or
+simply be passed over.
+
+=item semiverbatim=>boolean
+
+whether the catcode table should be modified before reading tokens.
+
+=back
+
+=item C<< DefColumnType($proto,$expansion); >>
+
+Defines a new column type for tabular and arrays.
+C<$proto> is the prototype for the pattern, analogous to the pattern
+used for other definitions, except that macro being defined is a single character.
+The C<$expansion> is a string specifying what it should expand into,
+typically more verbose column specification.
+
+=back
+
+=head2 Access to State
 
 =over
 
@@ -1263,13 +1991,18 @@ to the given scoping rule.
 Values are also used to specify most configuration parameters (which can
 therefor also be scoped).  The recognized configuration parameters are:
 
-  VERBOSITY         : the level of verbosity for debugging output, with 0 being default.
-  STRICT            : whether errors (such as undefined macros) are fatal.
-  INCLUDE_COMMENTS  : whether to preserve comments in the source, and to add
-                      occasional line-number comments.  Default does include them.
-  PRESERVE_NEWLINES : whether newlines in the source should be preserved (not 100% TeX-like).
-                      By default this is true.
-  SEARCHPATHS       : a list of directories to search for sources, implementations, dtds, and such.
+ VERBOSITY         : the level of verbosity for debugging
+                     output, with 0 being default.
+ STRICT            : whether errors (eg. undefined macros)
+                     are fatal.
+ INCLUDE_COMMENTS  : whether to preserve comments in the
+                     source, and to add occasional line
+                     number comments. (Default true).
+ PRESERVE_NEWLINES : whether newlines in the source should
+                     be preserved (not 100% TeX-like).
+                     By default this is true.
+ SEARCHPATHS       : a list of directories to search for
+                     sources, implementations, etc.
 
 =item C<< PushValue($type,$name,@values); >>
 
@@ -1311,21 +2044,46 @@ Looks up the current definition, if any, of the C<$token>.
 Install the Definition C<$defn> into C<$STATE> under its
 control sequence.
 
-=item C<< $boxes = Digest($tokens); >>
+=back
 
-Processes and digestes the C<$tokens>.  Any arguments needed by
-control sequences in C<$tokens> must be contained within the C<$tokens> itself.
+=head2 Low-level Functions
+
+=over
+
+=item C<< CleanLabel($label,$prefix); >>
+
+Cleans a C<$label> of disallowed characters,
+and prepends C<$prefix> (or C<LABEL>, if none given).
+
+=item C<< CleanIndexKey($key); >>
+
+Cleans an index key, so it can be used as an ID.
+
+=item C<< CleanBibKey($key); >>
+
+Cleans a bibliographic citation key, so it can be used as an ID.
+
+=item C<< CleanURL($url); >>
+
+Cleans a url.
+
+=item C<< UTF($code); >>
+
+Generates a UTF character, handy for the the 8 bit characters.
+For example, C<UTF(0xA0)> generates the non-breaking space.
 
 =item C<< MergeFont(%style); >>
 
 Set the current font by merging the font style attributes with the current font.
 The attributes and likely values (the values aren't required to be in this set):
 
-   family : serif, sansserif, typewriter, caligraphic, fraktur, script
-   series : medium, bold
-   shape  : upright, italic, slanted, smallcaps
-   size   : tiny, footnote, small, normal, large, Large, LARGE, huge, Huge
-   color  : any named color, default is black
+ family : serif, sansserif, typewriter, caligraphic,
+          fraktur, script
+ series : medium, bold
+ shape  : upright, italic, slanted, smallcaps
+ size   : tiny, footnote, small, normal, large,
+          Large, LARGE, huge, Huge
+ color  : any named color, default is black
 
 Some families will only be used in math.
 This function returns nothing so it can be easily used in beforeDigest, afterDigest.
@@ -1337,47 +2095,6 @@ Formats the C<$number> in (lowercase) roman numerals, returning a list of the to
 =item C<< @tokens = Roman($number); >>
 
 Formats the C<$number> in (uppercase) roman numerals, returning a list of the tokens.
-
-=item C<< $tokens = Expand($tokens); >>
-
-Expands the given C<$tokens> according to current definitions.
-
-=item C<< @tokens = Invocation($cs,@args); >>
-
-Constructs a sequence of tokens that would invoke the token C<$cs>
-on the arguments.
-
-=item C<< StartSemiVerbatim(); ... ; EndSemiVerbatim(); >>
-
-Reads an argument delimted by braces, while disabling most TeX catcodes.
-
-=item C<< DefParameterType($type,CODE($gullet,@values),%options); >>
-
-Defines a new Parameter type, C<$type>, with CODE for its reader.
-
-Options are:
-
-=over
-
-=item reversion=>CODE($arg,@values);
-
-This CODE is responsible for converting a previously parsed argument back
-into a sequence of Token's.
-
-=item optional=>boolean
-
-whether it is an error if no matching input is found.
-
-=item novalue=>boolean
-
-whether the value returned should contribute to argument lists, or
-simply be passed over.
-
-=item semiverbatim=>boolean
-
-whether the catcode table should be modified before reading tokens.
-
-=back
 
 =back
 

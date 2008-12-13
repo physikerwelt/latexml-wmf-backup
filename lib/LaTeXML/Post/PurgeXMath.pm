@@ -11,16 +11,14 @@
 # \=========================================================ooo==U==ooo=/ #
 package LaTeXML::Post::PurgeXMath;
 use strict;
-use LaTeXML::Util::LibXML;
-use base qw(LaTeXML::Post::Processor);
+use base qw(LaTeXML::Post);
 
 # ================================================================================
 sub process {
-  my($self,$doc,%options)=@_;
-  my @math = $doc->getElementsByTagNameNS($self->getNamespace,'XMath');
-  $self->Progress("Removing ".scalar(@math)." Intermediate XMath nodes");
-  foreach my $math (@math){
-    $math->parentNode->removeChild($math); }
+  my($self,$doc)=@_;
+  if(my @math = $doc->findnodes('//ltx:XMath')){
+    $self->Progress($doc,"Removing ".scalar(@math)." Intermediate XMath nodes");
+    $doc->removeNodes(@math); }
   $doc; }
 
 # ================================================================================

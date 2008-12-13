@@ -60,7 +60,7 @@ __END__
 
 =head1 NAME
 
-C<LaTeXML::Object> -- abstract base class for most LaTeXML objects.
+C<LaTeXML::Object> - abstract base class for most LaTeXML objects.
 
 =head1 DESCRIPTION
 
@@ -92,12 +92,15 @@ for object identity.
 
 =item C<< $boole = $object->isaToken; >>
 
+Returns whether C<$object> is an L<LaTeXML::Token>.
+
 =item C<< $boole = $object->isaBox; >>
+
+Returns whether C<$object> is an L<LaTeXML::Box>.
 
 =item C<< $boole = $object->isaDefinition; >>
 
-Returns whether C<$object> is of the type indicated; L<LaTeXML::Token>,
-L<LaTeXML::Box> or L<LaTeXML::Definition>.
+Returns whether C<$object> is an L<LaTeXML::Definition>.
 
 =item C<< $digested = $object->beDigested; >>
 
@@ -107,8 +110,8 @@ into boxes; Some objects, such as numbers can just return themselves.
 
 =item C<< $object->beAbsorbed($document); >>
 
-Do whatever is needed (typically by invoking appropriate methods on
-the C<$document>) to absorb the C<$object> into the C<$document>.
+Do whatever is needed to absorb the C<$object> into the C<$document>,
+typically by invoking appropriate methods on the C<$document>.
 
 =back
 

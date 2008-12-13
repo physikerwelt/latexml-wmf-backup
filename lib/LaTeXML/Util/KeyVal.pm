@@ -26,8 +26,11 @@ our @EXPORT= (qw(&ReadRequiredKeyVals &ReadOptionalKeyVals
 
 sub ReadRequiredKeyVals {
   my($gullet,$keyset)=@_;
-  Fatal("Missing argument") unless $gullet->ifNext(T_BEGIN);
-  (readKeyVals($gullet,$keyset,T_END)); }
+  if($gullet->ifNext(T_BEGIN)){
+    (readKeyVals($gullet,$keyset,T_END)); }
+  else {
+    Error(":expected:{ Missing keyval arguments");
+    (LaTeXML::KeyVals->new($keyset,T_BEGIN,T_END,)); }}
 
 sub ReadOptionalKeyVals {
   my($gullet,$keyset)=@_;
@@ -70,15 +73,15 @@ sub readKeyVals {
   my($gullet,$keyset,$close)=@_;
   my $startloc = $gullet->getLocator();
   my $open = $gullet->readToken;
-  $keyset = ($keyset ? $keyset->toString : '_anonymous_');
+  $keyset = ($keyset ? ToString($keyset) : '_anonymous_');
   my @kv=();
   while(1) {
     $gullet->skipSpaces; 
     # Read the keyword.
     my($ktoks,$delim)=$gullet->readUntil($T_EQ,$T_COMMA,$close);
-    Error("Fell off end expecting ".Stringify($close)." while reading KeyVal key starting at $startloc")
+    Error(":expected:".Stringify($close)." Fell off end expecting ".Stringify($close)." while reading KeyVal key starting at $startloc")
       unless $delim;
-    my $key= $ktoks->toString; $key=~s/\s//g;
+    my $key= ToString($ktoks); $key=~s/\s//g;
     if($key){
       my $keydef=LookupValue('KEYVAL@'.$keyset.'@'.$key);
       my $value;
@@ -89,7 +92,7 @@ sub readKeyVals {
 	StartSemiverbatim if $typedef && $$typedef{semiverbatim};
 
 	($value,$delim)=$gullet->readUntil($T_COMMA,$close);
-	if($type eq 'Plain'){}	# Fine as is.
+	if(($type eq 'Plain') || ($typedef && $$typedef{undigested})){}	# Fine as is.
 	elsif($type eq 'Semiverbatim'){ # Needs neutralization
 	  $value = $value->neutralize; }
 	else {
@@ -100,7 +103,7 @@ sub readKeyVals {
 	$value = LookupValue('KEYVAL@'.$keyset.'@'.$key.'@default'); }
       push(@kv,$key);
       push(@kv,$value); }
-    Error("Fell off end expecting ".Stringify($close)." while reading KeyVal value starting at $startloc")
+    Error(":expected:".Stringify($close)." Fell off end expecting ".Stringify($close)." while reading KeyVal value starting at $startloc")
       unless $delim;
     last if $delim->equals($close); }
   LaTeXML::KeyVals->new($keyset,$open,$close,@kv); }
@@ -171,7 +174,9 @@ sub beDigested {
   my @dkv=();
   while(@kv){
     my($key,$value)=(shift(@kv),shift(@kv));
-    push(@dkv,$key, (ref $value ? $value->beDigested($stomach) : $value)); }
+    my $keydef=LookupValue('KEYVAL@'.$keyset.'@'.$key);
+    my $dodigest = (ref $value) && (!$keydef || !$$keydef[0]{undigested});
+    push(@dkv,$key, ($dodigest ? $value->beDigested($stomach) : $value)); }
   (ref $self)->new($$self{keyset},$$self{open},$$self{close},@dkv); }
 
 sub revert {
@@ -183,8 +188,9 @@ sub revert {
     my($key,$value)=(shift(@kv),shift(@kv));
     my $keydef=LookupValue('KEYVAL@'.$keyset.'@'.$key);
     push(@tokens,T_OTHER(','),T_SPACE) if @tokens;
-    push(@tokens,Explode($key),T_OTHER('='),
-	 ($keydef ? $keydef->revertArguments($value) : $value->revert)); }
+    push(@tokens,Explode($key));
+    push(@tokens,T_OTHER('='),
+	 ($keydef ? $keydef->revertArguments($value) : $value->revert)) if $value; }
   unshift(@tokens,$$self{open} ) if $$self{open};
   push(   @tokens,$$self{close}) if $$self{close};
   @tokens; }
@@ -198,7 +204,7 @@ sub toString {
   while(@kv){
     my($key,$value)=(shift(@kv),shift(@kv));
     $string .= ', ' if $string;
-    $string .= $key.'='.$value->toString; }
+    $string .= $key.'='.ToString($value); }
   $string; }
 
 #======================================================================
