@@ -258,6 +258,7 @@ lib/LaTeXML/Package/bm.sty.ltxml
 lib/LaTeXML/Package/book.cls.ltxml
 lib/LaTeXML/Package/bookman.sty.ltxml
 lib/LaTeXML/Package/caption.sty.ltxml
+lib/LaTeXML/Package/cancel.sty.ltxml
 lib/LaTeXML/Package/ccfonts.sty.ltxml
 lib/LaTeXML/Package/chancery.sty.ltxml
 lib/LaTeXML/Package/charter.sty.ltxml
@@ -303,6 +304,7 @@ lib/LaTeXML/Package/helvet.sty.ltxml
 lib/LaTeXML/Package/hhline.sty.ltxml
 lib/LaTeXML/Package/html.sty.ltxml
 lib/LaTeXML/Package/hyperref.sty.ltxml
+lib/LaTeXML/Package/hyperxmp.sty.ltxml
 lib/LaTeXML/Package/ifpdf.sty.ltxml
 lib/LaTeXML/Package/inputenc.sty.ltxml
 lib/LaTeXML/Package/iopams.sty.ltxml
@@ -321,6 +323,7 @@ lib/LaTeXML/Package/llncs.cls.ltxml
 lib/LaTeXML/Package/longtable.sty.ltxml
 lib/LaTeXML/Package/lscape.sty.ltxml
 lib/LaTeXML/Package/luximono.sty.ltxml
+lib/LaTeXML/Package/lxRDFa.sty.ltxml
 lib/LaTeXML/Package/makeidx.sty.ltxml
 lib/LaTeXML/Package/mathpazo.sty.ltxml
 lib/LaTeXML/Package/mathpple.sty.ltxml
@@ -385,9 +388,10 @@ lib/LaTeXML/Package/amsb.fontmap.ltxml
 lib/LaTeXML/Package/ot4.fontmap.ltxml
 lib/LaTeXML/Package/utf8.def.ltxml
 #==================================================
-# TeX package
+# TeX packages
 #==================================================
 lib/LaTeXML/texmf/latexml.sty
+lib/LaTeXML/texmf/lxRDFa.sty
 #==================================================
 # Test Suite.
 #==================================================
@@ -457,6 +461,12 @@ t/ams/matrix.xml
 t/ams/cd.pdf
 t/ams/cd.tex
 t/ams/cd.xml
+t/ams/genfracs.pdf
+t/ams/genfracs.tex
+t/ams/genfracs.xml
+t/ams/sideset.pdf
+t/ams/sideset.tex
+t/ams/sideset.xml
 t/babel/french.pdf
 t/babel/french.tex
 t/babel/french.xml
@@ -469,11 +479,17 @@ t/babel/greek.xml
 t/babel/page545.pdf
 t/babel/page545.tex
 t/babel/page545.xml
+t/complex/aliceblog.pdf
+t/complex/aliceblog.tex
+t/complex/aliceblog.xml
 t/complex/xii.dtd
 t/complex/xii.pdf
 t/complex/xii.latexml
 t/complex/xii.tex
 t/complex/xii.xml
+t/complex/hypertest.pdf
+t/complex/hypertest.tex
+t/complex/hypertest.xml
 t/digestion/box.pdf
 t/digestion/box.tex
 t/digestion/box.xml
@@ -570,6 +586,9 @@ t/encoding/ly1.xml
 t/expansion/aftergroup.pdf
 t/expansion/aftergroup.tex
 t/expansion/aftergroup.xml
+t/expansion/definedness.pdf
+t/expansion/definedness.tex
+t/expansion/definedness.xml
 t/expansion/env.pdf
 t/expansion/env.tex
 t/expansion/env.xml
@@ -612,6 +631,9 @@ t/expansion/toks.xml
 t/fonts/accents.pdf
 t/fonts/accents.xml
 t/fonts/accents.tex
+t/fonts/cancel.tex
+t/fonts/cancel.xml
+t/fonts/cancel.pdf
 t/fonts/fonts.pdf
 t/fonts/fonts.tex
 t/fonts/fonts.xml
@@ -694,6 +716,9 @@ t/parse/compose.xml
 t/parse/functions.pdf
 t/parse/functions.tex
 t/parse/functions.xml
+t/parse/mixedfrac.pdf
+t/parse/mixedfrac.tex
+t/parse/mixedfrac.xml
 t/parse/operators.pdf
 t/parse/operators.tex
 t/parse/operators.xml
