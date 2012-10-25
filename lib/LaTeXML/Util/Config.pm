@@ -20,7 +20,7 @@ use Carp;
 use Getopt::Long qw(:config no_ignore_case);
 use Pod::Usage;
 use Pod::Find qw(pod_where);
-#use Data::Dumper;
+use Data::Dumper;
 use LaTeXML::Util::Pathname;
 use LaTeXML::Global;
 
@@ -59,7 +59,7 @@ sub read {
 	   "xml"       => sub { $opts->{format} = 'xml'; },
 	   "tex"       => sub { $opts->{format} = 'tex'; },
 	   "box"       => sub { $opts->{format} = 'box'; },
-	   "bibtex"    => sub { $opts->{type}='bibtex'; },
+	   "bibtex"    => sub { $opts->{type}='BibTeX'; },
 	   "bibliography=s" => \@{$opts->{bibliographies}}, # TODO: Document
 	   "sitedirectory=s"=>\$opts->{sitedirectory},
 	   "sourcedirectory=s"=>\$opts->{sourcedirectory},
@@ -129,6 +129,9 @@ sub read {
   if($opts->{showversion}){ print STDERR $opts->{identity}."\n"; exit(1); }
 
   $opts->{source} = $ARGV[0] unless $opts->{source};
+  if (!$opts->{type} || ($opts->{type} eq 'auto')) {
+    $opts->{type} = 'BibTeX' if ($opts->{source} && ($opts->{source} =~ /\.bib$/));
+  }
   return;
 }
 sub addMathFormat {
@@ -257,6 +260,7 @@ sub prepare_options {
   $opts->{whatsin} = 'document' unless defined $opts->{whatsin};
   $opts->{whatsout} = 'document' unless defined $opts->{whatsout};
   $opts->{type} = 'auto' unless defined $opts->{type};
+  unshift(@{$opts->{preload}}, ('TeX.pool','LaTeX.pool','BibTeX.pool')) if ($opts->{type} eq 'BibTeX');
 
   # Destination extension might indicate the format:
   if ((!defined $opts->{format}) && (defined $opts->{destination})){
@@ -361,7 +365,7 @@ sub prepare_options {
       push @{$opts->{math_formats}}, 'pmml';
     }
     # use parallel markup if there are multiple formats requested.
-    $opts->{parallelmath} = 1 if @{$opts->{math_formats}}>1;
+    $opts->{parallelmath} = 1 if ($opts->{math_formats} && (@{$opts->{math_formats}}>1));
   }
   # If really nothing hints to define format, then default it to XML
   $opts->{format} = 'xml' unless defined $opts->{format};
@@ -413,8 +417,26 @@ sub _read_options_file {
     /(\S+)\s*=\s*(.*)/;
     my ($key,$value) = ($1,$2||'');
     $value =~ s/\s+$//;
-    $value = $value ? "=$value" : '';
-    push @$opts, "--$key".$value;
+    # Special treatment for --path=$env:
+    if ($value=~/^\$(.+)$/) {
+      my @values = ();
+      my $env_name = $1;
+      my $env_value;
+      # Allow $env/foo paths, starting with $env prefixes
+      if ($env_name =~ /^([^\/]+)(\/+)(.+)$/ ) {
+        push @values, $ENV{$1}.'/'.$3 if $ENV{$1};
+      } else {
+      # But also the standard behaviour, where the $env is an array of paths
+        $env_value = $ENV{$env_name};
+        next unless $env_value;
+        @values = grep(-d $_,reverse(split(':',$env_value)));
+        next unless @values;
+      }
+      push(@$opts, "--$key=$_") foreach (@values);
+    } else {
+      $value = $value ? "=$value" : '';
+      push @$opts, "--$key".$value;
+    }
   }
   close OPT;
   $opts;
@@ -442,6 +464,15 @@ TODO
 =head2 METHODS
 
 TODO
+
+=over 4
+
+=item C<< $daemon->prepare_options($opts); >>
+
+Given an options hash reference $opts, performs a set of assignments of meaningful defaults
+    (when needed) and normalizations (for relative paths, etc).
+
+=back
 
 =head1 OPTIONS
 

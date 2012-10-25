@@ -154,6 +154,7 @@ sub getModel   { $_[0]->{model}; }
 sub lookupValue { my $e=$_[0]->{table}{value}{$_[1]}; $e && $$e[0]; }
 sub assignValue { assign_internal($_[0],'value',$_[1], $_[2],$_[3]); }
 
+# manage a (global) list of values
 sub pushValue {
   my($self,$key,@values)=@_;
   my $vtable = $$self{table}{value};
@@ -177,6 +178,25 @@ sub shiftValue {
   my $vtable = $$self{table}{value};
   assign_internal($self,'value',$key,[],'global') unless $$vtable{$key}[0];
   shift(@{$$vtable{$key}[0]}); }
+
+# manage a (global) hash of values
+sub lookupMapping {
+  my($self,$map,$key)=@_;
+  my $vtable = $$self{table}{value};
+  my $mapping = $$vtable{$map}[0];
+  ($mapping ? $$mapping{$key} : undef); }
+
+sub assignMapping {
+  my($self,$map,$key,$value)=@_;
+  my $vtable = $$self{table}{value};
+  assign_internal($self,'value',$map,{},'global') unless $$vtable{$map}[0];
+  $$vtable{$map}[0]{$key}=$value; }
+
+sub lookupMappingKeys {
+  my($self,$map)=@_;
+  my $vtable = $$self{table}{value};
+  my $mapping = $$vtable{$map}[0];
+  ($mapping ? %$mapping : ()); }
 
 sub lookupStackedValues { 
   my $stack = $_[0]->{table}{value}{$_[1]};
@@ -242,7 +262,7 @@ sub installDefinition {
   if($self->lookupValue("$cs:locked") && !$LaTeXML::State::UNLOCKED){
     if(my $s = $self->getStomach->getGullet->getSource){
       if(($s eq "Anonymous String") || ($s =~ /\.(tex|bib)$/)){
-	Info(":override:$cs Ignoring redefinition of $cs in $s\n");
+	Info('ignore',$cs,$self->getStomach,"Ignoring redefinition of $cs");
 	return; }}}
   assign_internal($self,'meaning',$cs => $definition, $scope); }
 
@@ -256,7 +276,8 @@ sub popFrame {
   my($self)=@_;
   my $table = $$self{table};
   if($$self{undo}[0]{_FRAME_LOCK_}){
-    Fatal(":unexpected Attempt to pop last locked stack frame"); }
+    Fatal('unexpected','<endgroup>',$self->getStomach,
+	  "Attempt to pop last locked stack frame"); }
   else {
     my $undo = shift(@{$$self{undo}});
     foreach my $subtable (keys %$undo){
@@ -302,7 +323,8 @@ sub popDaemonFrame {
     delete $$self{undo}[0]{_FRAME_LOCK_};
     $self->popFrame; }
   else {
-    Fatal(":unexpected Daemon Attempt to pop last stack frame"); }}
+    Fatal('unexpected','<endgroup>',$self->getStomach,
+	  "Daemon Attempt to pop last stack frame"); }}
 
 #======================================================================
 # Set one of the definition prefixes global, etc (only global matters!)
@@ -341,8 +363,9 @@ sub deactivateScope {
 	  shift(@{$$table{$subtable}{$key}});
 	  $$frame{$subtable}{$key}--; }
 	else {
-	  Warn(":internal Unassigning $subtable:$key from $value, but stack is "
-	       .join(', ',@{$$table{$subtable}{$key}})); }}}}}
+	  Warn('internal',$key,$self->getStomach,
+	       "Unassigning wrong value for $key from subtable $subtable in deactivateScope",
+	       "value is $value but stack is ".join(', ',@{$$table{$subtable}{$key}})); }}}}}
 
 sub getActiveScopes {
   my($self)=@_;
@@ -370,7 +393,7 @@ sub convertUnit {
   else{
     my $sp = $UNITS{$unit}; 
     if(!$sp){
-      Warn(":expected:<unit> Unknown unit \"$unit\"; assuming pt.");
+      Warn('expected','<unit>',undef,"Illegal unit of measure '$unit', assuming pt.");
       $sp = $UNITS{'pt'}; }
     $sp; }}
 

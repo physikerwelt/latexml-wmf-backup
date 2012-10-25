@@ -37,7 +37,9 @@ sub create {
 
 sub new {
   my($class,$string)=@_;
-  my $self =  bless {source=>"Anonymous String"}, $class;
+  $string = q{} unless defined $string;
+  my $self =  bless {source=>"Anonymous String",shortsource=>"String"}, $class;
+  #print STDERR "\n\n String Mouth: $string\n\n";
   $self->openString($string);
   $self->initialize;
   $self; }
@@ -132,12 +134,12 @@ sub stringify {
 
 #**********************************************************************
 sub getLocator {
-  my($self,$long)=@_;
+  my($self,$length)=@_;
   my($l,$c,$lstart,$cstart)=($$self{lineno},$$self{colno});
   #my $msg =  "at $$self{source}; line $l col $c";
   #Deyan: Upgrade message to XPointer style
   my $nc = $$self{nchars}-1; #There is always a weird (end of line?) char that gets counted
-  if ($c>=$nc) {
+  if ((defined $c) && ($c>=$nc)) {
     $lstart = $l;
     $cstart = $c - $nc;
   } else {
@@ -147,18 +149,19 @@ sub getLocator {
     $lstart = $l-1;
     $cstart = $nc - $c;
   }
-  my $msg = "$$self{source}#textrange(from=$lstart;$cstart,to=$l;$c)";
-  
-  if($long && (defined $l || defined $c)){
-    my $chars=$$self{chars};
-    my $n = $$self{nchars}; 
-    $c=$n-1 if $c >=$n;
-    my $c0 = ($c > 50 ? $c-40 : 0);
-    my $cn = ($n-$c > 50 ? $c+40 : $n-1);
-    my $p1 = (@$chars && join('',@$chars[$c0..$c-1]))||''; chomp($p1);
-    my $p2 = (@$chars && join('',@$chars[$c..$cn]))||''; chomp($p2);
-    $msg .="\n  ".$p1."\n  ".(' ' x ($c-$c0)).'^'.' '.$p2; }
-  $msg; }
+  "at $$self{source}#textrange(from=$lstart;$cstart,to=$l;$c)";
+  # if($length && (defined $l || defined $c)){
+  #   my $chars=$$self{chars};
+  #   my $n = $$self{nchars}; 
+  #   $c=$n-1 if $c >=$n;
+  #   my $c0 = ($c > 50 ? $c-40 : 0);
+  #   my $cn = ($n-$c > 50 ? $c+40 : $n-1);
+  #   my $p1 = (@$chars && join('',@$chars[$c0..$c-1]))||''; chomp($p1);
+  #   my $p2 = (@$chars && join('',@$chars[$c..$cn]))||''; chomp($p2);
+  #   $msg .="\n  ".$p1."\n  ".(' ' x ($c-$c0)).'^'.' '.$p2; }
+  # else {
+  #   "at $$self{source}; line $l col $c"; }
+}
 
 sub getSource {
   my($self)=@_;
@@ -254,7 +257,7 @@ sub readToken {
 
       # Sneak a comment out, every so often.
       if((($$self{lineno} % 25)==0) && $STATE->lookupValue('INCLUDE_COMMENTS')){
-	return T_COMMENT("**** $$self{source} Line $$self{lineno} ****"); }
+	return T_COMMENT("**** $$self{shortsource} Line $$self{lineno} ****"); }
     }
     # ==== Extract next token from line.
     my($ch,$cc)=$self->getNextChar;
@@ -296,14 +299,16 @@ sub readRawLines {
     else {
       $line = $self->getNextLine; 
       if(!defined $line){
-	Error(":expected:$endline Fell off end trying to match a lines to \"$endline\" from ".Stringify($self));
+	if(defined $endline){
+	  Error('expected',$endline,$self,
+		"Fell off end trying to match a lines to '$endline'"); }
 	last; }
       $line =~ s/\s*$/\n/s if defined $line;	# Is this right? 
       $$self{lineno}++;
       $$self{chars}=[]; $$self{nchars}=0;  $$self{colno}=0; }
-    if($exact && ($line eq $endline)){ 
+    if($exact && (defined $endline) && ($line eq $endline)){ 
       last; }
-    elsif(!$exact && ($line =~ /^(.*?)\Q$endline\E(.*)$/)){
+    elsif(!$exact && (defined $endline) && ($line =~ /^(.*?)\Q$endline\E(.*)$/)){
       my($pre,$post)=($1,$2);
       push(@lines,$pre."\n") if $pre;
       # Replace the \n with a \r in the line rest, since it will be tokenized
@@ -329,7 +334,9 @@ use Encode;
 
 sub new {
   my($class,$pathname)=@_;
-  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+#  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
 #  $$self{fordefinitions}=1;
   $$self{notes}=1;
   $self->openFile($pathname);
@@ -340,9 +347,9 @@ sub new {
 sub openFile {
   my($self,$pathname)=@_;
   local *IN;
-  if(! -r $pathname){ Fatal(":missing_file:$pathname Input file is not readable."); }
-  elsif((!-z $pathname) && (-B $pathname)){Fatal(":missing_file:$pathname Input file appears to be binary."); }
-  open(IN,$pathname) || Fatal(":missing_file:$pathname Can't read: ",$!);
+  if(! -r $pathname){ Fatal('I/O',$pathname,$self,"File $pathname is not readable."); }
+  elsif((!-z $pathname) && (-B $pathname)){Fatal('I/O',$pathname,$self,"Input file $pathname appears to be binary."); }
+  open(IN,$pathname) || Fatal('I/O',$pathname,$self,"Can't open $pathname for reading",$!);
   $$self{IN} = *IN;
   $$self{buffer}=[];
 }
@@ -380,7 +387,7 @@ sub getNextLine {
       # I _think_ that for TeX's behaviour we actually should turn such un-decodeable chars in to space(?).
       $line = decode($encoding, $line, Encode::FB_DEFAULT);
       if($line =~ s/\x{FFFD}/ /g){	# Just remove the replacement chars, and warn (or Info?)
-	Info(":unexpected input isn't valid under encoding $encoding"); }}}
+	Info('misdefined',$encoding,$self,"input isn't valid under encoding $encoding"); }}}
   $line .= "\r"; # put line ending back!
 
   if(!($$self{lineno} % 25)){
@@ -428,7 +435,9 @@ use base qw(LaTeXML::FileMouth);
 
 sub new {
   my($class,$pathname)=@_;
-  my $self = bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+##  my $self = bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
   $$self{fordefinitions}=1;
   $$self{notes}=1;
   $self->openFile($pathname);
@@ -452,7 +461,9 @@ use base qw(LaTeXML::Mouth);
 
 sub new {
   my($class,$pathname,$string)=@_;
-  my $self = bless {source=>$pathname}, $class;
+##  my $self = bless {source=>$pathname}, $class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
   $$self{fordefinitions}=1;
   $$self{notes}=1;
   $self->openString($string);
@@ -471,7 +482,7 @@ use base qw(LaTeXML::Mouth);
 sub new {
   my($class,$data,%options)=@_;
   $data =~ s/^literal://;
-  my $self =  bless {source=>"Anonymous String"}, $class;
+  my $self =  bless {source=>"Anonymous String",shortsource=>"String"}, $class;
   $$self{fordefinitions}=1 if $options{fordefinitions};
   $$self{notes}=1          if $options{notes};
   $self->openString($data);
@@ -485,7 +496,9 @@ use LaTeXML::Util::Pathname;
 
 sub new {
   my($class,$pathname,%options)=@_;
-  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+#  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
   $$self{fordefinitions}=1 if $options{fordefinitions};
   $$self{notes}=1          if $options{notes};
   $self->openString($options{content});
@@ -499,12 +512,36 @@ use LaTeXML::Util::Pathname;
 
 sub new {
   my($class,$pathname,%options)=@_;
-  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+#  my $self =  bless {source=>pathname_relative($pathname,pathname_cwd)}, $class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
   $$self{fordefinitions}=1 if $options{fordefinitions};
   $$self{notes}=1          if $options{notes};
   $self->openFile($pathname);
   $self->initialize;
   $self; }
+
+#**********************************************************************
+package LaTeXML::Mouth::http;
+use base qw(LaTeXML::Mouth);
+use LaTeXML::Util::WWW;
+use LaTeXML::Global;
+
+sub new {
+  my($class,$url,%options)=@_;
+  my($urlbase,$name,$ext)=url_split($url);
+  $STATE->assignValue(URLBASE=>$urlbase) if defined $urlbase;
+  my $self =  bless {source=>$url, shortsource=>$name}, $class;
+  $$self{fordefinitions}=1 if $options{fordefinitions};
+  $$self{notes}=1          if $options{notes};
+  my $content = auth_get($url);
+  $self->openString($content);
+  $self->initialize;
+  $self; }
+
+#**********************************************************************
+package LaTeXML::Mouth::https;
+use base qw(LaTeXML::Mouth::http);
 
 #**********************************************************************
 # A fake mouth provides a hook for getting the Locator of anything
@@ -516,8 +553,10 @@ use LaTeXML::Util::Pathname;
 
 sub new {
   my($class,$pathname)=@_;
-  my $shortpath=pathname_relative($pathname,pathname_cwd);
-  my $self = bless {source=>(length($pathname) < length($shortpath) ? $pathname : $shortpath)},$class;
+##  my $shortpath=pathname_relative($pathname,pathname_cwd);
+##  my $self = bless {source=>(length($pathname) < length($shortpath) ? $pathname : $shortpath)},$class;
+  my($dir,$name,$ext)=pathname_split($pathname);
+  my $self =  bless {source=>$pathname,shortsource=>"$name.$ext"}, $class;
   NoteBegin("Loading $$self{source}");
   $self; }
 
@@ -527,13 +566,14 @@ sub finish {
 
 # Evolve to figure out if this gets dynamic location!
 sub getLocator {
-  my($self)=@_;
+  my($self,$length)=@_;
   my $path = $$self{source};
+  my $loc = ($length && $length < 0 ? $$self{shortsource} :  $$self{source});
   my $frame=2;
   my($pkg,$file,$line);
   while(($pkg,$file,$line) = caller($frame++)){
     last if $file eq $path; }
-  $path.($line ? " line $line":''); }
+  $loc.($line ? " line $line":''); }
 
 sub getSource {
   my($self)=@_;
@@ -630,7 +670,7 @@ Returns the next L<LaTeXML::Token> from the source.
 
 Returns whether there is more data to read.
 
-=item C<< $string = $mouth->getLocator($long); >>
+=item C<< $string = $mouth->getLocator($length); >>
 
 Return a description of current position in the source, for reporting errors.
 

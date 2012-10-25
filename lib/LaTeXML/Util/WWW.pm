@@ -12,39 +12,70 @@
 
 package LaTeXML::Util::WWW;
 use strict;
+use LaTeXML::Global;
+use URI;
 use LWP;
 use LWP::Simple;
 use Exporter;
 our @ISA = qw(Exporter);
-our @EXPORT = qw( &auth_get);
+our @EXPORT = qw(&auth_get &url_find &url_split);
 
 sub auth_get {
   my ($url,$authlist) = @_;
-  my $browser = LWP::UserAgent->new;
+  my $browser;
+  if ($url =~ /^https/) {
+   $browser = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+  } else {
+   $browser = LWP::UserAgent->new;
+  }
   my $response=$browser->get($url);
   my $realm = $response->www_authenticate;
-  return $response unless $realm;
-  # Prompt for username pass for this location:
-  my $req; my $tries=3;
-  my ($uname,$pass) = @{$$authlist{$realm}} if $$authlist{$realm};
-  if (!$uname) {
-    print STDERR "Enter authentication info for realm: $realm\n URL: $url\n";
-    while (!($response && $response->is_success) && $tries>0) { # 3 tries
-      $uname = prompt('Username: ');
-      $pass = prompt('Password: ', -e => '*');
-      $req = HTTP::Request->new(GET => $url);
-      $req->authorization_basic($uname, $pass);
-      $response = $browser->request($req);
-      $tries--;
+  if ($realm) {
+    if ($realm =~ /^Basic realm="([^"]+)"$/) {
+      $realm = $1;
     }
-    $$authlist{$realm}=[$uname,$pass] if $response->is_success;
-  } else {
-    $req = HTTP::Request->new(GET => $url);
-    $req->authorization_basic($uname, $pass);
-    $response = $browser->request($req);
+    # Prompt for username pass for this location:
+    my $req; my $tries=3;
+    my ($uname,$pass) = @{$$authlist{$realm}} if $$authlist{$realm};
+    while (!($response && $response->is_success) && $tries>0) { # 3 tries
+      $tries--;
+      if (!$uname) {
+        $req = HTTP::Request->new(GET => $url);
+        $req->authorization_basic($uname, $pass);
+        $response = $browser->request($req);
+        $$authlist{$realm}=[$uname,$pass] if $response->is_success;
+      } else {
+        $req = HTTP::Request->new(GET => $url);
+        $req->authorization_basic($uname, $pass);
+        $response = $browser->request($req);
+      }
+    }
   }
-  $response;
+  Fatal('www','get',$url,'HTTP GET failed with: "'.$response->message.'"') unless ($response->is_success);
+  $response->content;
 }
+
+sub url_find {
+  my ($relative_url,%options) = @_;
+  return undef unless ($options{urlbase} && $relative_url);
+  $options{urlbase}.='/' unless ($options{urlbase} =~ /\/$/);
+  my $absolute_url = URI->new_abs($relative_url,$options{urlbase});
+  my $browser;
+  if ($absolute_url =~ /^https/) {
+   $browser = LWP::UserAgent->new(ssl_opts => { verify_hostname => 0 });
+  } else {
+   $browser = LWP::UserAgent->new;
+  }
+  my $response = $browser->head($absolute_url);
+  $response->is_success ? $absolute_url : undef;
+}
+
+sub url_split {
+  my ($url) = @_;
+  $url =~ /^(.+)\/([^\/]+)$/;
+  $1,$2;
+}
+
 
 #======================================================================
 1;

@@ -880,7 +880,9 @@ sub cmml_ci {
     my $cd = $item->getAttribute('omcd') || 'latexml';
     ['m:csymbol',{cd=>$cd},$meaning]; }
   else {
-    my $content = (ref $item ?  $item->textContent : $item);
+    my($content,%mmlattr)=stylizeContent($item,1);
+    if(my $mv = $mmlattr{mathvariant}){
+      $content = $mv."-".$content; }
     ['m:ci',{},$content]; }}
 
 # Experimental; for an XMApp with role=ID, we treat it as a ci
@@ -990,6 +992,14 @@ DefMathML('Apply:OVERACCENT:?', sub {
 DefMathML('Apply:UNDERACCENT:?', sub {
   my($accent,$base)=@_;
   ['m:munder',{accent=>'true'}, pmml($base),pmml_scriptsize($accent)]; });
+
+DefMathML('Apply:ENCLOSE:?', sub {
+  my($op,$base)=@_;
+  my $enclosure= $op->getAttribute('enclose');
+  my $color = $op->getAttribute('color');
+ ['m:menclose',{notation=>$enclosure,mathcolor=>$color},
+  ($color ? ['m:mstyle',{mathcolor=>$LaTeXML::MathML::COLOR||'black'}, pmml($base)]
+   : pmml($base))]; });
 
 #======================================================================
 # Basic Content elements:
