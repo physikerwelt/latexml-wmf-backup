@@ -67,9 +67,29 @@ sub concat_apply {
  Apply(New('concatenation',undef,role=>"MULOP",omcd=>"underspecified"),$t1,$t2);
 }
 
-sub sumop_apply_term {
-  my ($state, $sumop, $c, $t) = @_;
-  Apply($sumop,$t);
+sub prefix_apply_factor {
+  my $app = prefix_apply(@_);
+  $app->[1]->{'cat'}='factor';
+  $app;
+}
+sub prefix_apply_term {
+  my $app = prefix_apply(@_);
+  $app->[1]->{'cat'}='term';
+  $app;
+}
+
+sub postfix_apply_factor {
+  my ($state, $t, $c, $postop) = @_;
+  my $app = prefix_apply($state,$postop,$c,$t);
+  $app->[1]->{'cat'}='factor';
+  $app;
+}
+
+sub postfix_apply_term {
+  my ($state, $t, $c, $postop) = @_;
+  my $app = prefix_apply($state,$postop,$c,$t);
+  $app->[1]->{'cat'}='term';
+  $app;
 }
 
 sub set {
