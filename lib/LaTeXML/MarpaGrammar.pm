@@ -68,6 +68,10 @@ our $RULES = [
               ['BigTerm',[qw/Factor _ MULOP _ BigTerm/],'infix_apply_factor'],
               ['Term',[qw/Term _ ADDOP _ BigTerm/],'infix_apply_term'],
               # I.2.2. Prefix ADDOPs (any MULOPs?)
+              # TODO: These guys need more thinking...
+              ['Factor',[qw/TRIGFUNCTION _ TermArgument/],'prefix_apply_factor'],
+              ['Factor',[qw/OPFUNCTION _ TermArgument/],'prefix_apply_factor'],
+              ['Term',[qw/PREFIX _ TermArgument/],'prefix_apply_term'],
               ['Term',['PreTerm']],
               ['PreTerm',[qw/ADDOP _ FactorArgument/],'prefix_apply_term'],
               ['PreTerm',[qw/ADDOP _ TermArgument/],'prefix_apply_term'],
@@ -157,7 +161,7 @@ our $RULES = [
                 map { my $op=$_; {lhs=>$op, rhs=>[$op,'_',$script],action=>'postscript_apply',rank=>2} }
                     qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
                       ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
-                } qw/POSTSUPERSCRIPT POSTSUBSCRIPT/),
+                } qw/SUPOP POSTSUPERSCRIPT POSTSUBSCRIPT/),
               # VII.2. Pre/Float scripts
               (map { my $script=$_;
                 map { my $op=$_; [$op, [$script,'_',$op],'prescript_apply'] }
