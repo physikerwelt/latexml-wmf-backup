@@ -61,12 +61,30 @@ our $RULES = [
               # but never on the right! We should enforce this to avoid confusion? 
               # use a BigTerm category?
               ['Term',['BigTerm']],
-              ['BigTerm',[qw/BIGOP _ Factor/],'sumop_apply_term'],
-              ['BigTerm',[qw/BIGOP _ TermArgument/],'sumop_apply_term'],
+              ['BigTerm',[qw/BIGOP _ Factor/],'prefix_apply_term'],
+              ['BigTerm',[qw/BIGOP _ TermArgument/],'prefix_apply_term'],
               # I.2.1.2 Operations on BigTerms:
               ['BigTerm', [qw/Factor _ BigTerm/],'concat_apply_factor'],
               ['BigTerm',[qw/Factor _ MULOP _ BigTerm/],'infix_apply_factor'],
               ['Term',[qw/Term _ ADDOP _ BigTerm/],'infix_apply_term'],
+              # I.2.2. Prefix ADDOPs (any MULOPs?)
+              ['Term',['PreTerm']],
+              ['PreTerm',[qw/ADDOP _ FactorArgument/],'prefix_apply_term'],
+              ['PreTerm',[qw/ADDOP _ TermArgument/],'prefix_apply_term'],
+              # I.2.1.2 Operations on PreTerms:
+              ['PreTerm', [qw/PreTerm _ FactorArgument/],'concat_apply_factor'],
+              ['PreTerm',[qw/PreTerm _ MULOP _ FactorArgument/],'infix_apply_factor'],
+              # Note: the ADDOP operations are inherited from the usual ADDOP rules,
+              #       as PreTerm can be cast as Term
+              # I.3. Postfix operators (POSTFIX and ADDOPs)
+              ['Factor',[qw/FactorArgument _ POSTFIX/],'postfix_apply_factor'],
+              ['Term',[qw/TermArgument _ POSTFIX/],'postfix_apply_factor'],
+              ['Termlike',['PostTerm']], # Not really Term since we don't want ADDOP to work on the right
+              ['PostTerm',[qw/FactorArgument _ ADDOP/],'postfix_apply_factor'],
+              ['PostTerm',[qw/TermArgument _ ADDOP/],'postfix_apply_term'],
+              # I.2.1.2 Operations on PreTerms:
+              ['PostTerm', [qw/FactorArgument _ PostTerm/],'concat_apply_factor'],
+              ['PostTerm',[qw/FactorArgument _ MULOP _ PostTerm/],'infix_apply_factor'],
 
               # II. Relations
               # II.1. Infix relations
@@ -130,8 +148,8 @@ our $RULES = [
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
 
               # VI.3. Term sequences - TODO: what are these really? progressions?
-              ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply'],
-              ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
+              ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply']
+,              ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
 
               # VII. Scripts
 	            # VII.1. Post scripts
@@ -160,11 +178,13 @@ our $RULES = [
               ['METARELOP',['EQUALS']],
               ['ADDOP',['LOGICOP']], # Boolean algebra, lattices
               ['ADDOP',['ADDOPTerminal']],
+              ['MULOP',['MULOPTerminal']],
               ['LOGICOP',['LOGICOPTerminal']],
+              ['ARROW',['ARROWTerminal']],
               ['BIGOP',['SUMOP']],
               ['BIGOP',['INTOP']],
               # XI. Start:
-              ['Start',['Term']],
+              ['Start',['Termlike']],
               ['Start',['Formula']],
               ['Start',['RelativeFormula']],
               ['Start',['Vector']],
@@ -196,6 +216,7 @@ sub parse {
   @$unparsed = map (($_, '_::'), @$unparsed);
   pop @$unparsed;
   #print STDERR "\n\n";
+  my $failed = 0;
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
@@ -205,17 +226,20 @@ sub parse {
     } elsif ($category eq 'RELOP') {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
+
+    $category.='Terminal' if $category =~ /^(((META)?REL|ADD|LOGIC|MUL)OP)|ARROW$/;
     #print STDERR "$category:$lexeme:$id\n";
-    $category.='Terminal' if $category =~ /^(META)?RELOP|ADDOP|LOGICOP$/;
-
-    last unless defined $rec->read($category,$lexeme.':'.$id);
+    my $rec_events = $rec->read($category,$lexeme.':'.$id);
+    if (! defined $rec_events) {
+      $failed = 1; last;
+    }
   }
-
   my @values = ();
-  while ( defined( my $value_ref = $rec->value() ) ) {
-    push @values, ${$value_ref};
+  if (!$failed) {
+    while ( defined( my $value_ref = $rec->value() ) ) {
+      push @values, ${$value_ref};
+    }
   }
-
   # TODO: Support multiple parses!
   (@values>1) ? (['ltx:XMApp',{meaning=>"cdlf-set"},New('cdlf-set',undef,omcd=>"cdlf"),@values]) : (shift @values);
 }
