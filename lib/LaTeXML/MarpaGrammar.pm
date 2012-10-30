@@ -72,12 +72,8 @@ our $RULES = [
               # TODO: These guys need more thinking...
               #   ... quite confusing interplay, think of -sin x and sin x/y
               #   or tg n!
-              ['FactorArgument',[qw/TRIGFUNCTION _ FactorArgument/],'prefix_apply_factor'],
-              ['TermArgument',[qw/TRIGFUNCTION _ TermArgument/],'prefix_apply_factor'],
-              ['FactorArgument',[qw/OPFUNCTION _ FactorArgument/],'prefix_apply_factor'],
-              ['TermArgument',[qw/OPFUNCTION _ TermArgument/],'prefix_apply_factor'],
-              ['Term',[qw/PREFIX _ Factor/],'prefix_apply_term'],
-              ['Term',[qw/PREFIX _ TermArgument/],'prefix_apply_term'],
+              ['FactorArgument',[qw/PREFIX _ FactorArgument/],'prefix_apply_factor'],
+              ['TermArgument',[qw/PREFIX _ TermArgument/],'prefix_apply_term'],
               ['Term',['PreTerm']],
               ['PreTerm',[qw/ADDOP _ FactorArgument/],'prefix_apply_term'],
               ['PreTerm',[qw/ADDOP _ TermArgument/],'prefix_apply_term'],
@@ -122,7 +118,10 @@ our $RULES = [
               # Hm, not really, they can appear anywhere with ease, as long as 
               # the relation ops are from different domains, so that there is a unique reading
               ['Entry',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_entry'],
+              # a := (1<3) should be grammatical
+              ['Entry',[qw/FactorArgument _ RELOP _ FormulaArgument/],'infix_apply_entry'],
 	            # So, allow them everywhere and let them explode:
+              # ... or not ... we need something smart here
               #['FactorArgument',[qw/FactorArgument _ RELOP _ Term/],'infix_apply_term'],
               #['TermArgument',[qw/TermArgument _ RELOP _ Term/],'infix_apply_term'],
               #['FormulaArgument',[qw/FormulaArgument _ RELOP _ Term/],'infix_apply_formula'],
@@ -152,8 +151,8 @@ our $RULES = [
               ['Element',['ADDOP']], # implicitly includes logicop
               ['Element',['MULOP']],
               ['Element',['RELOP']],
-              ['Element',['TRIGFUNCTION']],
-              ['Element',['OPFUNCTION']],
+              ['Element',['PREFIX']],
+              ['Element',['POSTFIX']],
               ['Element',['METARELOP']],
               # VI.2.2 Recursive case: sequences
               ['Sequence',[qw/Vector _ PUNCT _ Element/],'infix_apply'],
@@ -173,15 +172,17 @@ our $RULES = [
               (map { my $script=$_;
                 map { my $op=$_; {lhs=>$op, rhs=>[$op,'_',$script],action=>'postscript_apply',rank=>2} }
                     qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
-                      TRIGFUNCTION OPFUNCTION ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
+                      PREFIX POSTFIX ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
                 } qw/SUPOP POSTSUPERSCRIPT POSTSUBSCRIPT/),
               # VII.2. Pre/Float scripts
               (map { my $script=$_;
                 map { my $op=$_; [$op, [$script,'_',$op],'prescript_apply'] }
                     qw/FactorArgument TermArgument FormulaArgument RelativeFormulaArgument
-                      TRIGFUNCTION OPFUNCTION ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
+                      PREFIX POSTFIX ADDOP LOGICOP MULOP RELOP METARELOP ARROW BIGOP/;
               } qw/FLOATSUPERSCRIPT FLOATSUBSCRIPT/),
 
+              # VIII. Transfix operators
+              ['FactorArgument',[qw/VERTBAR _ Term _ VERTBAR/],'fenced'],
 
               # X. Lexicon adjustments
               ['FactorArgument',['ATOM'],'first_arg_term'],
@@ -194,16 +195,21 @@ our $RULES = [
               ['RELOP',['RELOPTerminal']],
               ['METARELOP',['METARELOPTerminal']],
               ['METARELOP',['EQUALS']],
+              ['METARELOP',['VERTBAR']],
               ['ADDOP',['LOGICOP']], # Boolean algebra, lattices
               ['ADDOP',['ADDOPTerminal']],
               ['MULOP',['MULOPTerminal']],
+              ['MULOP',['VERTBAR']],
               ['LOGICOP',['LOGICOPTerminal']],
               ['ARROW',['ARROWTerminal']],
-              ['TRIGFUNCTION',['TRIGFUNCTIONTerminal']],
-              ['OPFUNCTION',['OPFUNCTIONTerminal']],
+              ['PREFIX',['TRIGFUNCTION']],
+              ['PREFIX',['OPFUNCTION']],
+              ['PREFIX',['LIMITOP']],
               ['BIGOP',['SUMOP']],
               ['BIGOP',['INTOP']],
+              ['BIGOP',['OPERATOR']],
               # XI. Start:
+              ['Start',['Entry']],
               ['Start',['Termlike']],
               ['Start',['Formula']],
               ['Start',['RelativeFormula']],
@@ -247,7 +253,7 @@ sub parse {
       $category = 'EQUALS' if ($lexeme eq 'equals');
     }
 
-    $category.='Terminal' if $category =~ /^(((META)?REL|ADD|LOGIC|MUL)OP)|ARROW|(TRIG|OP)FUNCTION$/;
+    $category.='Terminal' if $category =~ /^(((META)?REL|ADD|LOGIC|MUL)OP)|ARROW$/;
     #print STDERR "$category:$lexeme:$id\n";
     my $rec_events = $rec->read($category,$lexeme.':'.$id);
     if (! defined $rec_events) {
