@@ -130,7 +130,6 @@ sub prescript_apply {
   NewScript(MaybeLookup($base),MaybeLookup($script)); }
 
 # VI. Transfix:
-
 sub set {
   my ( $state, undef, undef, $t, undef, undef, undef, $f ) = @_;
   Apply(New('Set'),$t,$f); }
