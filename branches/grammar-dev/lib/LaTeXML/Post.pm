@@ -297,12 +297,13 @@ sub addCrossrefs {
     if(my $node=$doc->findNodeByID($id)){ # If we find a node,
       $self->addCrossref($node,$xref_id); }}}}}} # add a crossref from it to $others's node
 
-# Revert to a canonical LaTeXML ID, that had possibly clashed with the one we are currently seeing
-# Secret knowledge! Just remove any alphabetic characters before dots or the end of the ID string.
+# Get a new, related, but unique id
+# Sneaky option: try $LaTeXML::Document::ID_SUFFIX as a suffix for id, first.
 sub unmodifyID {
   my($self,$id)=@_;
   $id =~ s/(\d)(\w+)(\.|$)/$1$3/;
   $id; }
+
 #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 package LaTeXML::Post::Document;

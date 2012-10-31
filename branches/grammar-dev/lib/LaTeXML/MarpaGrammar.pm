@@ -164,8 +164,8 @@ our $RULES = [
               ['Sequence',[qw/Sequence _ PUNCT _ Element/],'infix_apply'],
 
               # VI.3. Term sequences - TODO: what are these really? progressions?
-              ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply']
-,              ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
+              ['TermSequence',[qw/Term _ PUNCT _ Term/],'infix_apply'],
+              ['TermSequence',[qw/TermSequence _ PUNCT _ Term/],'infix_apply'],
 
               # VII. Scripts
 	            # VII.1. Post scripts
@@ -205,9 +205,9 @@ our $RULES = [
               ['PREFIX',['TRIGFUNCTION']],
               ['PREFIX',['OPFUNCTION']],
               ['PREFIX',['LIMITOP']],
+              ['PREFIX',['OPERATOR']],
               ['BIGOP',['SUMOP']],
               ['BIGOP',['INTOP']],
-              ['BIGOP',['OPERATOR']],
               # XI. Start:
               ['Start',['Entry']],
               ['Start',['Termlike']],
@@ -243,6 +243,7 @@ sub parse {
   pop @$unparsed;
   #print STDERR "\n\n";
   my $failed = 0;
+  my $rec_events = undef;
   foreach (@$unparsed) {
     my ($category,$lexeme,$id) = split(':',$_);
     # Issues: 
@@ -255,16 +256,26 @@ sub parse {
 
     $category.='Terminal' if $category =~ /^(((META)?REL|ADD|LOGIC|MUL)OP)|ARROW$/;
     #print STDERR "$category:$lexeme:$id\n";
-    my $rec_events = $rec->read($category,$lexeme.':'.$id);
+    $rec_events = $rec->read($category,$lexeme.':'.$id);
     if (! defined $rec_events) {
       $failed = 1; last;
     }
   }
+
   my @values = ();
   if (!$failed) {
-    while ( defined( my $value_ref = $rec->value() ) ) {
-      push @values, ${$value_ref};
+    my $value_ref;
+    do {
+      $value_ref = undef;
+      eval { local $SIG{__DIE__} = undef; $value_ref = $rec->value(); 1; };
+      push @values, ${$value_ref} if (defined $value_ref);
+    } while ((!$@) && (defined $value_ref));
+    if ($@) {
+      # Was left Incomplete??
+
     }
+  } else {
+    # Can't recognize it...print out the issue:
   }
   # TODO: Support multiple parses!
   (@values>1) ? (['ltx:XMApp',{meaning=>"cdlf-set"},New('cdlf-set',undef,omcd=>"cdlf"),@values]) : (shift @values);
