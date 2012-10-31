@@ -26,7 +26,6 @@ use strict;
 use Marpa::R2;
 use LaTeXML::MathSemantics;
 use LaTeXML::Global;
-use base (qw(Exporter));
 our $parses = 0;
 our $RULES = [
               # I. Operators
@@ -64,6 +63,7 @@ our $RULES = [
               ['Term',['BigTerm']],
               ['BigTerm',[qw/BIGOP _ Factor/],'prefix_apply_term'],
               ['BigTerm',[qw/BIGOP _ TermArgument/],'prefix_apply_term'],
+              ['BigTerm',[qw/BIGOP _ BigTerm/],'prefix_apply_term'],
               # I.2.1.2 Operations on BigTerms:
               ['BigTerm', [qw/Factor _ BigTerm/],'concat_apply_factor'],
               ['BigTerm',[qw/Factor _ MULOP _ BigTerm/],'infix_apply_factor'],
@@ -72,6 +72,7 @@ our $RULES = [
               # TODO: These guys need more thinking...
               #   ... quite confusing interplay, think of -sin x and sin x/y
               #   or tg n!
+              # TODO: Maybe add BigTerm as possible argument?
               ['FactorArgument',[qw/PREFIX _ FactorArgument/],'prefix_apply_factor'],
               ['TermArgument',[qw/PREFIX _ TermArgument/],'prefix_apply_term'],
               ['Term',['PreTerm']],
@@ -244,8 +245,9 @@ sub parse {
   #print STDERR "\n\n";
   my $failed = 0;
   my $rec_events = undef;
-  foreach (@$unparsed) {
-    my ($category,$lexeme,$id) = split(':',$_);
+  while (@$unparsed) {
+    my $next = shift @$unparsed;
+    my ($category,$lexeme,$id) = split(':',$next);
     # Issues: 
     # 1. More specific lexical roles for fences, =, :, others...?
     if ($category eq 'METARELOP') {
