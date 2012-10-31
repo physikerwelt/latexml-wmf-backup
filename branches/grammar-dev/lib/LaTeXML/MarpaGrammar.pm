@@ -210,7 +210,6 @@ our $RULES = [
               ['BIGOP',['SUMOP']],
               ['BIGOP',['INTOP']],
               # XI. Start:
-              ['Start',['Entry']],
               ['Start',['Termlike']],
               ['Start',['Formula']],
               ['Start',['RelativeFormula']],
