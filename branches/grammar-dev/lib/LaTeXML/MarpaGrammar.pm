@@ -108,7 +108,7 @@ our $RULES = [
               ['PostRelative',[qw/Termlike _ RELOP _ PostRelative/],'chain_apply_relation'],
               # III. Metarelations
               # III.1. Infix Metarelations
-              ['RelativeFormula',[qw/'RelativeFormulaArgument'/]],
+              ['RelativeFormula',[qw/RelativeFormulaArgument/]],
               ['RelativeFormula',[qw/Formula _ METARELOP _ Formula/],'infix_apply_formula'],
               ['RelativeFormula',[qw/RelativeFormula _ METARELOP _ Formula/],'chain_apply'],
 
