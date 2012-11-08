@@ -190,7 +190,7 @@ our $RULES = [
               ['FormulaArgument',['ATOM'],'first_arg_formula'],
               ['FactorArgument',['UNKNOWN'],'first_arg_term'],
               ['FormulaArgument',['UNKNOWN'],'first_arg_formula'],
-              ['FactorArgument',['NUMBER'],'first_arg_term'],
+              ['FactorArgument',['NUMBER'],'first_arg_number'],
               ['RELOP',['EQUALS']],
               # Terminals... TODO: make this into a map and/or rethink
               ['RELOP',['RELOPTerminal']],
