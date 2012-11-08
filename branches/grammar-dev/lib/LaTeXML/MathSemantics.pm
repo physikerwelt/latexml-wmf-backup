@@ -23,6 +23,9 @@ sub first_arg_role {
   $xml = $xml ? ($xml->cloneNode(1)) : undef;
   $xml->setAttribute('role',$role) if $xml;
   $xml; }
+sub first_arg_number {
+  my ($state,$parse) = @_;
+  first_arg_role('NUMBER',$parse); }
 sub first_arg_term {
   my ($state,$parse) = @_;
   first_arg_role('term',$parse); }
