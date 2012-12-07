@@ -14,7 +14,7 @@
 default namespace = "http://dlmf.nist.gov/LaTeXML"
 
 ## The inline module defines basic inline elements used throughout 
-Inline.class &= \text* & emph* & acronym* & rule* & anchor* & ref* & cite* & bibref*
+Inline.class &= \text* & emph* & del* & sub* & sup* & acronym* & rule* & anchor* & ref* & cite* & bibref*
 
 ## Additionally, it defines these meta elements. These are generally hidden,
 ## and can appear in inline and block contexts.
@@ -30,9 +30,10 @@ element text { text_attributes &  text_model }
 ## Attributes for \elementref{text}.
 text_attributes = 
   Common.attributes &
-  Positionable.attributes & 
+  Positionable.attributes &
   Fontable.attributes &
-  Colorable.attributes
+  Colorable.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{text}.
 ## DG: Quick fix disallowing Misc elements in text:
@@ -46,10 +47,46 @@ emph =
 element emph { emph_attributes &  emph_model }
 
 ## Attributes for \elementref{emph}.
-emph_attributes =  Common.attributes
+emph_attributes = Common.attributes & Fontable.attributes & Colorable.attributes & Backgroundable.attributes
 
 ## Content model for \elementref{emph}.
 emph_model = Inline.model
+
+#======================================================================
+
+del =
+## Deleted text.
+element del { del_attributes, del_model }
+
+## Attributes for \elementref{del}.
+del_attributes = Common.attributes & Fontable.attributes & Colorable.attributes & Backgroundable.attributes
+
+## Content model for \elementref{del}.
+del_model = Inline.model
+
+#======================================================================
+
+sub =
+## Textual subscript text.
+element sub { sub_attributes, sub_model }
+
+## Attributes for \elementref{sub}.
+sub_attributes =  Common.attributes
+
+## Content model for \elementref{sub}.
+sub_model = (text & Inline.class), (text & Inline.class)
+
+#======================================================================
+
+sup =
+## Textual superscript text.
+element sup { sup_attributes, sup_model }
+
+## Attributes for \elementref{sup}.
+sup_attributes =  Common.attributes
+
+## Content model for \elementref{sup}.
+sup_model = (text & Inline.class), (text & Inline.class)
 
 #======================================================================
 
@@ -73,7 +110,7 @@ rule =
 element rule { rule_attributes &  rule_model }
 
 ## Attributes for \elementref{rule}.
-rule_attributes = Common.attributes &  Positionable.attributes
+rule_attributes = Common.attributes &  Positionable.attributes &  Colorable.attributes
 
 ## Content model for \elementref{rule}.
 rule_model = empty
@@ -289,25 +326,7 @@ element rdf { rdf_attributes, rdf_model }
 
 ## Attributes for \elementref{rdf}
 rdf_attributes =
-  Common.attributes &
-
-  ## indicates the RDFa property.
-  attribute property { text }? &
-
-  ## indicates the RDFa content.
-  attribute content { text }? &
-
-  ## indicates the RDFa relation.
-  attribute rel { text }? &
-
-  ## indicates the RDFa relation.
-  attribute resource { text }? &
-
-  ## indicates the RDFa content datatype.
-  attribute datatype { text }? &
-
-  ## indicates the RDFa about.
-  attribute about { text }?
+  Common.attributes
 
 ## Content model for \elementref{rdf}
 rdf_model = Flow.model
