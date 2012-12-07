@@ -42,7 +42,7 @@ inline-para =
 element inline-para { inline-para_attributes &  inline-para_model }
 
 ## Attributes for \elementref{inline-para}.
-inline-para_attributes = Common.attributes &  Positionable.attributes & Backgroundable.attributes,
+inline-para_attributes = Common.attributes &  Positionable.attributes & Backgroundable.attributes
 
 
 ## Content model for \elementref{inline-para}.
