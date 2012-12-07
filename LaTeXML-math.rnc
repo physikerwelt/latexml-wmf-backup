@@ -390,7 +390,7 @@ XMCell_attributes =
   attribute colspan { xsd:nonNegativeInteger }? &
 
   ## indicates how many rows this cell spans or covers.
-  attribute rowspan { xsd:nonNegativeInteger }?,
+  attribute rowspan { xsd:nonNegativeInteger }? &
 
 # This would have been clearer, but messes up conversion to dtd
 #  attribute align { "left" | "right" | "center" | "justify" | text }? &
