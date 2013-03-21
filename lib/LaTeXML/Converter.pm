@@ -19,9 +19,8 @@ use Carp;
 use Encode;
 use Data::Dumper;
 
-use LaTeXML::Package qw(pathname_is_literaldata);
 use LaTeXML::Util::Pathname;
-use LaTeXML::Util::WWW;
+#use LaTeXML::Util::WWW;
 use LaTeXML::Util::ObjectDB;
 use LaTeXML::Util::Extras;
 use LaTeXML::Post::Scan;
@@ -175,7 +174,8 @@ sub convert {
   local $@ = 'Fatal:conversion:unknown TeX to XML conversion failed! (Unknown Reason)' if ((!$convert_eval_return) && (!$@));
   my $eval_report = $@;
   $runtime->{status} = $latexml->getStatusMessage;
-  $runtime->{status_code} = $latexml->getStatusCode;
+#  $runtime->{status_code} = $latexml->getStatusCode;
+  $runtime->{status_code} = 0;
   # End daemon run, by popping frame:
   $latexml->withState(sub {
     my($state)=@_; # Remove current state frame
@@ -266,7 +266,7 @@ sub convert {
   $digested=undef;
   $dom=undef;
   $result=undef;
-  $self->sanitize($log) if ($runtime->{status_code} == 3);
+###  $self->sanitize($log) if ($runtime->{status_code} == 3);
   return {result=>$serialized,log=>$log,status=>$runtime->{status},'status_code'=>$runtime->{status_code}};
 }
 
@@ -471,9 +471,9 @@ sub convert_post {
   $DB->finish;
 
   $runtime->{status}.= "\nPost: ".$latexmlpost->getStatusMessage;
-  $runtime->{status_code} =($runtime->{status_code} > $latexmlpost->getStatusCode) ?
-    $runtime->{status_code} : $latexmlpost->getStatusCode;
-
+#  $runtime->{status_code} =($runtime->{status_code} > $latexmlpost->getStatusCode) ?
+#    $runtime->{status_code} : $latexmlpost->getStatusCode;
+  $runtime->{status_code}=0;
   print STDERR "\nPostprocessing complete: ".$latexmlpost->getStatusMessage."\n";
   print STDERR "processing finished ".localtime()."\n" if $verbosity >= 0;
   return $postdoc;
