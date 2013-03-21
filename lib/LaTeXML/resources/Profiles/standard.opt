@@ -1,0 +1,4 @@
+comments =
+xml =
+#preload = ids.sty
+path = $LATEXMLINPUTS
