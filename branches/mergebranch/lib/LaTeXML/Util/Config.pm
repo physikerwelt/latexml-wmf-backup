@@ -275,7 +275,7 @@ sub check {
   # 2. Place sane defaults where needed
   $self->_prepare_options;
 }
-use Data::Dumper;
+
 sub _obey_profile {
   my ($self) = @_;
   $self->{dirty}=1;
@@ -291,7 +291,6 @@ sub _obey_profile {
       my $conf_tmp = LaTeXML::Util::Config->new;
       $conf_tmp->read(_read_options_file($file));
       $profile_opts = $conf_tmp->options;
-      print STDERR Dumper($file);
     } else {
       # Throw an error, fallback to custom
       croak ("Error:unexpected:$profile Profile $profile was not recognized, reverting to 'custom'");
