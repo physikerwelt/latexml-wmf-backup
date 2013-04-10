@@ -52,6 +52,7 @@ sub prepare_session {
   # 1. Ensure option "sanity"
   $opts->check;
   $opts = $opts->options;
+
   my $opts_comparable = { map { $_ => $opts->{$_} } @COMPARABLE };
   my $self_opts_comparable = { map { $_ => $self->{opts}->{$_} } @COMPARABLE };
   #TODO: Some options like paths and includes are additive, we need special treatment there
@@ -129,7 +130,6 @@ sub convert {
   if ($opts->{whatsin} eq "math") {
     $source = "literal:".MathDoc($source);
   }
-
   # Prepare daemon frame
   my $latexml = $self->{latexml};
   $latexml->withState(sub {
@@ -501,7 +501,8 @@ sub new_latexml {
 			  inputencoding=>$opts->{inputencoding},
 			  includeStyles=>$opts->{includestyles},
 			  documentid=>$opts->{documentid},
-			  mathparse=>$opts->{mathparse});
+			  mathparse=>$opts->{mathparse},
+        nomathparse=>$opts->{nomathparse});
   if(my @baddirs = grep {! -d $_} @{$opts->{paths}}){
     warn "\n$LaTeXML::Version::IDENTITY : these path directories do not exist: ".join(', ',@baddirs)."\n"; }
 
