@@ -16,6 +16,8 @@ bin/latexml
 bin/latexmlfind
 bin/latexmlpost
 bin/latexmlmath
+bin/latexmlc
+bin/latexmls
 #==================================================
 # Core Modules
 #==================================================
@@ -24,6 +26,7 @@ lib/LaTeXML/Version.in
 lib/LaTeXML/Array.pm
 lib/LaTeXML/Box.pm
 lib/LaTeXML/Color.pm
+lib/LaTeXML/Converter.pm
 lib/LaTeXML/Definition.pm
 lib/LaTeXML/Document.pm
 lib/LaTeXML/Error.pm
@@ -73,6 +76,7 @@ lib/LaTeXML/Common/XML.pm
 # Utility Modules
 #==================================================
 lib/LaTeXML/Util/Alignment.pm
+lib/LaTeXML/Util/Config.pm
 lib/LaTeXML/Util/Geometry.pm
 lib/LaTeXML/Util/KeyVal.pm
 lib/LaTeXML/Util/MathMLLinebreaker.pm
@@ -184,6 +188,8 @@ lib/LaTeXML/resources/RelaxNG/svg/svg-viewport-attrib.rnc
 lib/LaTeXML/resources/RelaxNG/svg/svg-viewport-attrib.rng
 lib/LaTeXML/resources/RelaxNG/svg/svg-xlink-attrib.rnc
 lib/LaTeXML/resources/RelaxNG/svg/svg-xlink-attrib.rng
+lib/LaTeXML/resources/RelaxNG/svg/svg11-basic.rng
+lib/LaTeXML/resources/RelaxNG/svg/svg11-tiny.rng
 lib/LaTeXML/resources/RelaxNG/svg/svg11.rnc
 lib/LaTeXML/resources/RelaxNG/svg/svg11.rng
 lib/LaTeXML/resources/DTD/LaTeXML.dtd
@@ -216,6 +222,7 @@ lib/LaTeXML/resources/CSS/ltx-report.css
 lib/LaTeXML/resources/CSS/ltx-book.css
 lib/LaTeXML/resources/CSS/ltx-amsart.css
 lib/LaTeXML/resources/CSS/ltx-apj.css
+lib/LaTeXML/resources/javascript/LaTeXML-maybeMathjax.js
 #==================================================
 # Supported Packages
 #==================================================
@@ -425,6 +432,12 @@ t/70_parse.t
 t/80_complex.t
 t/81_babel.t
 t/90_latexmlpost.t
+t/91_latexmlc_api.t
+t/92_profiles.t
+t/93_formats.t
+t/94_runtimes.t
+t/95_complex_config.t
+t/alignment/foo.png
 t/alignment/badeqnarray.pdf
 t/alignment/badeqnarray.tex
 t/alignment/badeqnarray.xml
@@ -699,6 +712,7 @@ t/fonts/mathcolor.xml
 t/fonts/textsymbols.pdf
 t/fonts/textsymbols.tex
 t/fonts/textsymbols.xml
+t/graphics/none.png
 t/graphics/colors.pdf
 t/graphics/colors.tex
 t/graphics/colors.xml
