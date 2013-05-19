@@ -1,5 +1,0 @@
-use LaTeXML::Package;
-
-AssignValue(INCLUDE_STYLES=>1,'global');
-
-1;
