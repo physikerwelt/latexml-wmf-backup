@@ -7,6 +7,7 @@ MANIFEST			This list of files
 MANIFEST.SKIP
 README
 INSTALL
+INSTALL_PSGI
 LICENSE
 manual.pdf
 #==================================================
@@ -18,6 +19,7 @@ bin/latexmlpost
 bin/latexmlmath
 bin/latexmlc
 bin/latexmls
+bin/latexml.psgi
 #==================================================
 # Core Modules
 #==================================================
@@ -906,6 +908,7 @@ t/daemon/document.tex
 t/daemon/fragment.tex
 t/daemon/post.tex
 t/daemon/pre.tex
+t/daemon/stex.tex
 t/daemon/tiny.bib
 t/daemon/api/port.spec
 t/daemon/api/port.status
@@ -954,7 +957,6 @@ t/daemon/profiles/standard.status
 t/daemon/profiles/standard.xml
 t/daemon/profiles/stex/stex.spec
 t/daemon/profiles/stex/stex.status
-t/daemon/profiles/stex/stex.tex
 t/daemon/profiles/stex/stex.xml
 t/daemon/runtimes/timeout.spec
 t/daemon/runtimes/timeout.status
