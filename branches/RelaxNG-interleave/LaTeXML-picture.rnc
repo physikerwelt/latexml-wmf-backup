@@ -18,7 +18,7 @@ default namespace = "http://dlmf.nist.gov/LaTeXML"
 namespace a = "http://relaxng.org/ns/compatibility/annotations/1.0"
 
 ## This module defines a picture environment, roughly a subset of SVG.
-## NOTE: Consider whether it is sensible to drop this and incorporate SVG itself.
+## NOTE: Eventually we will drop these subset elements and incorporate SVG itself.
 Misc.class &= picture*
 
 #======================================================================
@@ -240,7 +240,10 @@ dots =
 element dots { dots_attributes &  dots_model }
 
 ## Attributes for \elementref{dots}.
-dots_attributes = Common.attributes &  Picture.attributes
+dots_attributes = Common.attributes & Picture.attributes &
+  attribute dotstyle { text }? &
+  attribute dotsize { text }? &
+  attribute dotscale { text }?
 
 ## Content model for \elementref{dots}.
 dots_model = empty

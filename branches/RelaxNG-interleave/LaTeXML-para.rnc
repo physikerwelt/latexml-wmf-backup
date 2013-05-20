@@ -28,8 +28,10 @@ para =
 element para { para_attributes &  para_model }
 
 ## Attributes for \elementref{para}.
-para_attributes = Common.attributes &  ID.attributes & Backgroundable.attributes
-
+para_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{para}.
 para_model = Block.model
@@ -42,8 +44,11 @@ inline-para =
 element inline-para { inline-para_attributes &  inline-para_model }
 
 ## Attributes for \elementref{inline-para}.
-inline-para_attributes = Common.attributes &  Positionable.attributes & Backgroundable.attributes
-
+inline-para_attributes =
+  Common.attributes &
+  ID.attributes &
+  Positionable.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{inline-para}.
 inline-para_model = Para.model
@@ -56,7 +61,10 @@ theorem =
 element theorem { theorem_attributes &  theorem_model }
 
 ## Attributes for \elementref{theorem}.
-theorem_attributes = Common.attributes &  Labelled.attributes & Backgroundable.attributes
+theorem_attributes =
+  Common.attributes &
+  Labelled.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{theorem}.
 theorem_model = title? & Para.model
@@ -69,7 +77,10 @@ proof =
 element proof { proof_attributes &  proof_model }
 
 ## Attributes for \elementref{proof}.
-proof_attributes = Common.attributes &  Labelled.attributes & Backgroundable.attributes
+proof_attributes =
+  Common.attributes &
+  Labelled.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{proof}.
 proof_model = title? & Para.model

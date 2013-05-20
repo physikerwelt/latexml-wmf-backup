@@ -25,8 +25,10 @@ element tabular { tabular_attributes &  tabular_model }
 
 ## Attributes for \elementref{tabular}.
 tabular_attributes = 
-  Common.attributes & 
+  Common.attributes &
   Backgroundable.attributes &
+  ID.attributes &
+
   ## which row's baseline aligns with the container's baseline.
   attribute vattach { "top" | "middle" | "bottom" }? &
 
@@ -80,7 +82,10 @@ tr =
 element tr { tr_attributes &  tr_model }
 
 ## Attributes for \elementref{tr}.
-tr_attributes = Common.attributes  & Backgroundable.attributes
+tr_attributes =
+  Common.attributes &
+  Backgroundable.attributes &
+  ID.attributes
 
 ## Content model for \elementref{tr}.
 tr_model = td*
@@ -94,8 +99,9 @@ element td { td_attributes &  td_model }
 ## Attributes for \elementref{td}.
 td_attributes = 
 
-  Common.attributes & 
+  Common.attributes &
   Backgroundable.attributes &
+  ID.attributes &
 
   ## indicates how many columns this cell spans or covers.
   attribute colspan { xsd:nonNegativeInteger }? &

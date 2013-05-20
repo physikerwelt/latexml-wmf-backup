@@ -18,9 +18,9 @@ Block.class &=
          & itemize* & enumerate* & description*
 
 
-## Additionally, it defines these miscellaneous elements that can appear
-## in both inline and block contexts.
-Misc.class  &= inline-block* & verbatim* & break* & graphics* & svg*
+## These are inline forms of logical lists
+## (they are included in Misc since that has been the general strategy)
+Misc.class &=  inline-itemize* & inline-enumerate* & inline-description*
 
 ## Additional Metadata that can be present in equations.
 EquationMeta.class = constraint
@@ -66,7 +66,7 @@ equation_attributes =  Common.attributes &  Labelled.attributes  & Backgroundabl
 
 
 ## Content model for \elementref{equation}.
-equation_model = Math* & MathFork* & \text* & tabular* & Meta.class & EquationMeta.class
+equation_model = Math* & MathFork* & \text* & Misc.class & Meta.class & EquationMeta.class
 
 #======================================================================
 
@@ -119,7 +119,13 @@ quote =
 element quote { quote_attributes &  quote_model }
 
 ## Attributes for \elementref{quote}.
-quote_attributes = Common.attributes &  ID.attributes &   Backgroundable.attributes
+quote_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes &
+
+  ## The kind of quotation; could be something like verse, or translation
+  attribute role { text }?
 
 ## Content model for \elementref{quote}.
 quote_model = Block.model
@@ -133,7 +139,11 @@ block =
 element block { block_attributes &  block_model }
 
 ## Attributes for \elementref{block}.
-block_attributes = Common.attributes &  ID.attributes &  Positionable.attributes &   Backgroundable.attributes
+block_attributes =
+  Common.attributes &
+  ID.attributes &
+  Positionable.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{block}.
 block_model = Inline.model
@@ -152,54 +162,15 @@ listingblock_model = Block.model*
 
 #======================================================================
 
-break =
-## A forced line break.
-element break {  break_attributes &  break_model }
-
-## Attributes for \elementref{break}.
-break_attributes = Common.attributes
-
-## Content model for \elementref{break}.
-break_model = empty
-
-#======================================================================
-
-inline-block =
-## An inline block. Actually, can appear in inline or block mode, but
-## typesets its contents as a block.
-element inline-block { inline-block_attributes &  inline-block_model }
-
-## Attributes for \elementref{inline-block}.
-inline-block_attributes = Common.attributes &  ID.attributes &  Positionable.attributes &  Backgroundable.attributes
-
-## Content model for \elementref{inline-block}.
-inline-block_model = Block.model
-
-#======================================================================
-
-verbatim =
-## Verbatim content
-element verbatim { verbatim_attributes &  verbatim_model }
-
-## Attributes for \elementref{verbatim}.
-verbatim_attributes =
-  Common.attributes &
-  ID.attributes &
-  Fontable.attributes &
-  Colorable.attributes & 
-  Backgroundable.attributes
-
-## Content model for \elementref{verbatim}.
-verbatim_model = Inline.model
-
-#======================================================================
-
 itemize =
 ## An itemized list.
 element itemize { itemize_attributes &  itemize_model }
 
 ## Attributes for \elementref{itemize}.
-itemize_attributes = Common.attributes &  ID.attributes &  Backgroundable.attributes
+itemize_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{itemize}.
 itemize_model = item*
@@ -211,7 +182,10 @@ enumerate =
 element enumerate { enumerate_attributes &  enumerate_model }
 
 ## Attributes for \elementref{enumerate}.
-enumerate_attributes = Common.attributes &  ID.attributes &  Backgroundable.attributes
+enumerate_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{enumerate}.
 enumerate_model = item*
@@ -224,7 +198,10 @@ description =
 element description { description_attributes &  description_model }
 
 ## Attributes for \elementref{description}.
-description_attributes = Common.attributes &  ID.attributes &  Backgroundable.attributes
+description_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{description}.
 description_model = item*
@@ -232,14 +209,80 @@ description_model = item*
 #======================================================================
 
 item =
-## An item within a list.
-element item { item_attributes &  item_model }
+## An item within a list (\elementref{itemize}, \elementref{enumerate}, or \elementref{description}).
+element item { item_attributes & item_model }
 
 ## Attributes for \elementref{item}.
-item_attributes = Common.attributes &  Labelled.attributes &  Backgroundable.attributes
+item_attributes =
+  Common.attributes &
+  Labelled.attributes &
+  Backgroundable.attributes
 
 ## Content model for \elementref{item}.
-item_model =   tag? &  Para.model
+item_model =   tag? & Para.model
+
+#======================================================================
+
+inline-itemize =
+## An inline form of itemized list.
+element inline-itemize { inline-itemize_attributes & inline-itemize_model }
+
+## Attributes for \elementref{inline-itemize}.
+inline-itemize_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
+
+## Content model for \elementref{inline-itemize}.
+inline-itemize_model = inline-item*
+
+#======================================================================
+
+inline-enumerate =
+## An inline form of enumerated list.
+element inline-enumerate { inline-enumerate_attributes & inline-enumerate_model }
+
+## Attributes for \elementref{inline-enumerate}.
+inline-enumerate_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
+
+## Content model for \elementref{inline-enumerate}.
+inline-enumerate_model = inline-item*
+
+#======================================================================
+
+inline-description =
+## An inline form of description list.
+## The \elementref{inline-item}s within are expected to have a \elementref{tag}
+## which represents the term being described in each \elementref{inline-item}.
+element inline-description { inline-description_attributes & inline-description_model }
+
+## Attributes for \elementref{inline-description}.
+inline-description_attributes =
+  Common.attributes &
+  ID.attributes &
+  Backgroundable.attributes
+
+## Content model for \elementref{inline-description}.
+inline-description_model = inline-item*
+
+#======================================================================
+
+inline-item =
+## An item within an inline list (\elementref{inline-itemize},\elementref{inline-enumerate}
+## or \elementref{inline-description}).
+element inline-item { inline-item_attributes & inline-item_model }
+
+## Attributes for \elementref{item}.
+inline-item_attributes =
+  Common.attributes &
+  Labelled.attributes &
+  Backgroundable.attributes
+
+## Content model for \elementref{inline-item}.
+inline-item_model =   tag?, (Inline.class & Misc.class & Meta.class)
 
 #======================================================================
 
@@ -261,43 +304,4 @@ tag_attributes =
 ## Content model for \elementref{tag}.
 tag_model = Inline.model
 
-#======================================================================
-
-graphics =
-## A graphical insertion of an external file. 
-element graphics { graphics_attributes &  graphics_model }
-
-## Attributes for \elementref{graphics}.
-graphics_attributes =
-  Common.attributes & 
-  ID.attributes & 
-  Imageable.attributes & 
-
-  ## the path to the graphics file. This is the (often minimally specified) path
-  ## to a graphics file omitting the type extension.  Once resolved to a specific
-  ## image file, the \attr{imagesrc} (from Imageable.attributes) is used.
-  attribute graphic { text }? &
-
-  ## a comma separated list of candidate graphics files that could be used to
-  ## for \attr{graphic}.  A post-processor or application may choose from these,
-  ## or may make its own selection or synthesis to implement the graphic for a given target.
-  attribute candidates { text }? &
-
-  ## an encoding of the scaling and positioning options
-  ## to be used in processing the graphic.
-  attribute options { text }?
-
-
-## Content model for \elementref{graphics}.
-graphics_model = empty
-
-#======================================================================
-
-svg =
-## An SVG (Scalable Vector Graphics) object
-## [eventually must adapt to put LaTeXML objects in foreignObject]
-grammar {
-  include "svg11.rnc"
-  { SVG.foreignObject.content = parent Flow.model }
-}
 #======================================================================
