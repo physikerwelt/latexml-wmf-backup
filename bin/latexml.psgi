@@ -97,7 +97,6 @@ my $app = sub {
   my $opts = [];
   # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
   while (my ($key,$value) = splice(@all_params,0,2)) {
-    $value = '' if ($value && ($value  eq 'null'));
     if ($key =~ /^(tex)|(source)$/) {
       # TeX is data, separate
       $source = $value unless defined $source;
@@ -106,6 +105,7 @@ my $app = sub {
       # You don't get to specify harddrive info in the web service
       next;
     }
+    $value = '' if ($value && ($value  eq 'null'));
     push @$opts, ($key,uri_unescape($value));
   }
 
@@ -132,7 +132,7 @@ my $app = sub {
   #Override/extend with session-specific options in $opt:
   $converter->prepare_session($config);
   # If there are no protocols, use literal: as default:
-  if (!$source) {
+  if ((! defined $source) || (length($source)<1)) {
     return [
       '200',
       [ 'Content-Type' => 'application/json; charset=utf-8' ],
