@@ -1,0 +1,36 @@
+Source: latexml-wmf
+Maintainer: Carl Fürstenberg <azatoth@gmail.com>
+Section: tex
+Priority: extra
+Build-Depends: debhelper (>= 9.0.0), libplack-perl, libxml-libxslt-perl, texlive-binaries
+Standards-Version: 3.9.3
+Homepage:http://dlmf.nist.gov/LaTeXML/
+
+
+Package: latexml-wmf
+Architecture: any
+Depends: ${perl:Depends},
+         ${misc:Depends},
+         texlive, libclone-perl, libdata-compare-perl, libio-prompt-perl, perlmagick, libparse-recdescent-perl, libxml-libxml-perl,
+         libxml-libxslt-perl, libarchive-zip-perl, libio-string-perl, apache2, libapache2-mod-perl2, libplack-perl, libfile-which-perl, libjson-xs-perl
+Built-Using: subversion
+Description: TeX and LaTeX to XML translator
+ For many, LaTeX is the prefered format for document authoring,
+ particularly those involving significant mathematical content
+ and where quality typesetting is desired. On the other hand,
+ content-oriented XML is an extremely useful representation for
+ documents, allowing them to be used, and reused, for a variety
+ of purposes, not least, presentation on the Web. Yet, the style
+ and intent of LaTeX markup, as compared to XML markup, not to
+ mention its programmability, presents difficulties in converting
+ documents from the former format to the latter. Perhaps ironically,
+ these difficulties can be particularly large for mathematical
+ material, where there is a tendency for the markup to focus on
+ appearance rather than meaning.
+ .
+ The choice of LaTeX for authoring, and XML for delivery were natural
+ and uncontroversial choices for the Digital Library of Mathematical
+ Functions. Faced with the need to perform this conversion and the lack
+ of suitable tools to perform it, the DLMF project proceeded to develop
+ thier own tool, LaTeXML, for this purpose.
+
