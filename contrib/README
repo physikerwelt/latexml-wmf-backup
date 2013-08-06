@@ -8,3 +8,4 @@ bindings:  LaTeXML bindings for existing LaTeX packages.
 doc: 	   documentation for the bindings.
 xsl:       XSLT style sheets for use with LaTeXML.
 css:       CSS style sheets for LaTeXML-generated documents.
+LaTeX2*: Experimental Converters to MS Word, Libreoffice, and DocBook. 
