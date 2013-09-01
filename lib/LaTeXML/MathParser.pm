@@ -17,6 +17,7 @@ package LaTeXML::MathParser;
 use strict;
 use Parse::RecDescent;
 use LaTeXML::Global;
+use LaTeXML::Font;
 use base (qw(Exporter));
 
 our @EXPORT_OK = (qw(&Lookup &New &Absent &Apply &ApplyNary &recApply
@@ -906,6 +907,8 @@ sub Fence {
         "got ".join(' ',map(ToString($_),@stuff)) )
     unless $nargs % 2;
   my ($open,$close) = ($stuff[0],$stuff[$#stuff]);
+  my $lspace = (ref $open) && $open->getAttribute('lspace');
+  my $rspace = (ref $close) && $close->getAttribute('rspace');
   my $o  = p_getValue($open);
   my $c = p_getValue($close);
   my $n = int(($nargs-2+1)/2);
@@ -920,7 +923,11 @@ sub Fence {
   # When we're parsing XMWrap, we shouldn't try so hard to infer a meaning (it'll usually be wrong)
   $op = undef unless $LaTeXML::MathParser::STRICT;
   if(($n==1) && (!defined $op)){ # Simple case.
-    Annotate($stuff[1],open=>($open ? $open : undef), close=>($close ? $close : undef)); }
+    Annotate($stuff[1],
+	     open=>($open ? $open : undef),
+	     close=>($close ? $close : undef),
+	     lspace=>($lspace ? $lspace : undef),
+	     rspace=>($rspace ? $rspace : undef)); }
   else {
     ApplyDelimited(New($op,undef,role=>'FENCED'),@stuff); }}
 
@@ -1003,6 +1010,9 @@ sub NewScript {
   my ($sx,$sl) = (p_getAttribute($script,'scriptpos')||'post')=~ /^(pre|mid|post)?(\d+)?$/;
   my ($x,$y)   = p_getAttribute($script,'role')               =~ /^(FLOAT|POST)?(SUB|SUPER)SCRIPT$/;
   $x = ($x eq 'FLOAT' ? 'pre' : $bx || 'post');
+  my $lspace = ($x eq 'pre') && p_getAttribute($script,'lspace');
+  my $rspace = ($x ne 'pre') && p_getAttribute($script,'rspace');
+
   my $t;
   my $l = $sl || $bl ||
     (($t=$LaTeXML::MathParser::DOCUMENT->getNodeBox($script))
@@ -1010,6 +1020,8 @@ sub NewScript {
   my $app = Apply(New(undef,undef, role=>$y.'SCRIPTOP',scriptpos=>"$x$l"),
 		  $base,Arg($script,0));
   $$app[1]{scriptpos}=$bx if $bx ne 'post';
+  $$app[1]{lspace}=$lspace if $lspace && !$$app[1]{lspace}; # better to add?
+  $$app[1]{rspace}=$rspace if $rspace && !$$app[1]{rspace}; # better to add?
   $app; }
 
 # Basically, like NewScript, but decorates an operator with sub/superscripts
