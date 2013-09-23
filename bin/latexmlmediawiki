@@ -1,0 +1,119 @@
+#!/usr/bin/perl -w
+use strict;
+use warnings;
+use strict;
+
+use File::Basename 'dirname';
+use File::Spec::Functions 'catdir';
+my $FILE_BASE;
+BEGIN {
+    $FILE_BASE = dirname(__FILE__);
+}
+use File::Path;
+use Encode;
+use JSON::XS qw(encode_json decode_json);
+use lib $FILE_BASE."/lib";
+use Data::Dumper qw(Dumper);
+
+use LaTeXML::Util::Svg;
+use LaTeXML::Util::Config;
+use LaTeXML::Util::Pathname;
+use LaTeXML::Converter;
+use URI::Escape;
+use String::ShellQuote qw(shell_quote);
+
+my $input = $ARGV[0];
+
+sub parse_request_query {
+   my $parameters = [map {scalar(@{$_})==1 ? (@{$_},'') : @{$_}}
+      map { [split(/=/,$_)] } map {split(/\&/,$_)} $input ];
+  return $parameters;
+  #my $parameters = [ map { [split(/=/,$_)] } map {split(/\&/,$_)} $input ];
+  #print Dumper $parameters ;
+}
+sub php_escapeshellarg { 
+    my $str = @_ ? shift : $_;
+    $str =~ s/((?:^|[^\\])(?:\\\\)*)'/$1\\'/g;
+    return "'$str'";
+}
+my $all_params= parse_request_query();
+#print Dumper $all_params;
+#__END__
+my $source = '';
+  my $opts = [];
+  # Ugh, disallow 'null' as a value!!! (TODO: Smarter fix??)
+  while (my ($key,$value) = splice($all_params,0,2)) {
+    if ($key =~ /^(tex)|(source)$/) {
+      # TeX is data, separate
+      $source = $value;
+      next;
+    } elsif ($key=~/local|path/) {
+      # You don't get to specify harddrive info in the web service
+      next;
+    }
+    $value = '' if ($value && ($value  eq 'null'));
+    push @$opts, ($key,uri_unescape($value));
+  }
+  #print Dumper $source;
+  $source = uri_unescape($source);
+  push @$opts, ('source', $source); # Set in options hash, to e.g. guess bibTeX jobs
+  #print Dumper $source;
+  my $config = LaTeXML::Util::Config->new();
+  $config->read_keyvals($opts);
+  my $latexheader = $config->get('latexheader');
+  #print Dumper $latexheader; 
+  my $texsource = $config->get('tex');
+  my $svgIN = $latexheader ."\n\$\$\n".$source."\n\$\$\n\\end{document}";
+  my ($svg,$png,$image_log) = LaTeXML::Util::Svg->createSVG($svgIN);
+  #print $svg;
+    my $base = $config->get('base');
+  my $saved_cdir;
+  if ($base && !pathname_is_url($base)) {
+    my $canonical_base = pathname_canonical($base);
+    if ($canonical_base ne pathname_cwd()) {
+      $saved_cdir = pathname_cwd();
+      chdir $canonical_base
+       or croak("Fatal:server:chdir Can't chdir to $canonical_base: $!");
+       $LaTeXML::Util::Pathname::Pathname_CWD=$canonical_base;
+    }
+  }
+
+  # We now have a LaTeXML config object - $config.
+  my $converter = LaTeXML::Converter->get_converter($config);
+  #Override/extend with session-specific options in $opt:
+  $converter->prepare_session($config);
+  # If there are no protocols, use literal: as default:
+  if ((! defined $source) || (length($source)<1)) {
+    return [
+      '200',
+      [ 'Content-Type' => 'application/json; charset=utf-8' ],
+      [ encode_json({result => '', status => "Fatal:input:empty No TeX provided on input", status_code=>3,
+                           log => "Status:conversion:3\nFatal:input:empty No TeX provided on input"})]];
+  } else {
+    #$source = "literal:".$source unless (pathname_is_url($source));
+    #Send a request:
+    my $response = $converter->convert($source);
+    my ($result, $status, $status_code, $log);
+    if (defined $response) {
+      ($result, $status, $status_code, $log) = map { $response->{$_} } qw(result status status_code log);
+    }
+    # Delete converter if Fatal occurred
+    undef $converter unless defined $result;
+    if (defined $saved_cdir) {
+      $LaTeXML::Util::Pathname::Pathname_CWD = $saved_cdir;
+      chdir $saved_cdir;
+    }
+    # 3. Return conversion results
+    # print STDERR "Result: \n",$result,"\n";
+    # print STDERR "Log: \n",$log,"\n";
+    # print STDERR "Status: \n",$status,"\n"; 
+	print encode_json({result=>$result,status=>$status,status_code=>$status_code,log=>$log.$image_log,'svg'=>$svg,'png'=>$png});
+}
+  #print Dumper $latexheader;
+
+#print Dumper $opts;
+#print LaTeXML::Util::Svg->createSVG();
+#print $stderr;
+#print $stdout;
+1;
+__END__

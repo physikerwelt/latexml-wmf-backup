@@ -69,7 +69,7 @@ WriteMakefile(NAME => 'LaTeXML',
           'HTTP::Request::Common' => 0,
 			   },
 	      EXE_FILES => [ 'bin/latexml','bin/latexmlpost','bin/latexmlfind','bin/latexmlmath','bin/latexmlc','bin/latexmls',
-                       'bin/latexml.psgi'],
+                       'bin/latexml.psgi', 'bin/latexmlmediawiki','bin/MediawikiTex2Svg','bin/MediawikiSvg2Png'],
 	      macro => $MORE_MACROS,
 	      );
 

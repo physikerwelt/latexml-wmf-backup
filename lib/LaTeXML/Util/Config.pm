@@ -148,7 +148,9 @@ sub getopt_specification {
   "VERSION!"   => \$opts->{showversion},
   "debug=s"   => \@{$opts->{debug}},
   "documentid=s" => \$opts->{documentid},
-  "help"      => \$opts->{help}
+  "help"      => \$opts->{help},
+  # WIKIMEDIA WORKAROUND
+  "latexheader=s" => \$opts->{latexheader}
   };
   return ($spec,$opts) unless ($options{type} && ($options{type} eq 'keyvals'));
   # Representation use case:

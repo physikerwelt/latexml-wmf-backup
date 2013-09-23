@@ -1,0 +1,7 @@
+#bin/bash
+TMP=$(mktemp -d)
+cd $TMP
+echo $1>input.svg
+echo "<!--The input-SVG:->>">&2
+rsvg-convert input.svg
+rm -rf $TMP
