@@ -5,7 +5,7 @@ echo $1>input.tex
 echo "<!--The input-TeXFile:->>">&2
 cat input.tex 1>&2
 echo "<!--pdflatex-->">&2
-time pdflatex input.tex -interaction=batchmode
+time pdflatex input.tex -interaction=batchmode >&2
 echo "<!--pdfcrop-->">&2
 time pdfcrop input.pdf crop.pdf 1>&2
 echo "<!--pdf2svg-->">&2

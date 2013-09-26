@@ -13,7 +13,7 @@ sub checkTex {
 	my $outtex;
 
 	#Hack to avoid wrong encoded output
-	#$intex =~ s/\\/\\\\/g;
+	$intex =~ s/\\\\/\\/g;
 	#$intex =~ s/\n/\\n/g;
 
 	my @args = ("timeout",'5','texvc', $intex);
@@ -22,13 +22,13 @@ sub checkTex {
 	my($stdout, $sdterr, $success, $exit_code) = capture_exec( @args );
 	my $duration = time() - $start;
 	#print "\nin: $intex ->$stdout \n";
-	if(substr($stdout,0,1) eq '+'){
+	my $status = substr($stdout,0,1);
+	if( $status eq '+'){
 		$passed = 1;
-		$outtex = substr($stdout,1,-1);
-	} else {
-		$outtex = $stdout;
-	}
-	return ($passed,$outtex, "\n\nTexvc-time:$duration\n\n");
+		$stdout =~ s/.(.+)/$1/;
+	} 
+	return (1,$intex,"\n\nTexvc-time:$duration\n.Fix texvc input not to much encoding");
+	return ($passed,$stdout, "\n\nTexvc-time:$duration\n$intex -($status)> $stdout \n");
 }
 1;
 __END__

@@ -70,7 +70,6 @@ my $source = '';
                            log => $texvlog,'texvc_error'=>$outtex});
 } else {
   $source = $outtex;
-  print "HEOADF".$outtex;
   my $svgIN = $latexheader ."\n\$\$\n".$source."\n\$\$\n\\end{document}";
   my ($svg,$png,$image_log) = LaTeXML::Util::Svg->createSVG($svgIN);
   #print $svg;
@@ -93,7 +92,7 @@ my $source = '';
   # If there are no protocols, use literal: as default:
   if ((! defined $source) || (length($source)<1)) {
     print encode_json({result => '', status => "Fatal:input:empty No TeX provided on input", status_code=>3,
-                           log => "Status:conversion:3\nFatal:input:empty No TeX provided on input"});
+                           log => $texvlog."Status:conversion:3\nFatal:input:empty No TeX provided on input"});
   } else {
     #$source = "literal:".$source unless (pathname_is_url($source));
     #Send a request:
