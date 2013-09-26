@@ -1,8 +1,0 @@
-comments = 
-noparse = 
-nopost = 
-format = xml
-xml = 
-preload = [ids]latexml.sty
-path = $LATEXMLINPUTS
-path = $ARXMLIVINPUTS
