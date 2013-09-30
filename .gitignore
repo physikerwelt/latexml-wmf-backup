@@ -1,6 +1,5 @@
 MYMETA.yml
 Makefile
-blib/
 debian/files
 debian/latexml-wmf.debhelper.log
 debian/latexml-wmf.substvars
