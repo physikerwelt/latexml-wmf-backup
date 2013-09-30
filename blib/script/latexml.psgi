@@ -15,7 +15,7 @@ my $FILE_BASE;
 BEGIN {
     $FILE_BASE = dirname(__FILE__);
 }
-use lib $FILE_BASE."/../blib/lib";
+use lib $FILE_BASE."/../lib";
 
 use File::Path;
 use Encode;
