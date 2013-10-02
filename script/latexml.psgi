@@ -16,7 +16,7 @@ BEGIN {
     $FILE_BASE = dirname(__FILE__);
 }
 use lib $FILE_BASE."/../lib";
-
+use lib $FILE_BASE."/../lib/LaTeXML";
 use File::Path;
 use Encode;
 use JSON::XS qw(encode_json decode_json);
